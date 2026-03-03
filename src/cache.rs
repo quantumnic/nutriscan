@@ -154,7 +154,48 @@ impl Cache {
         self.conn.execute("DELETE FROM products", [])?;
         Ok(())
     }
+
+    /// Return all cached products ordered by most recently updated.
+    pub fn recent(&self, limit: u32) -> SqlResult<Vec<Product>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT code, product_name, brands, nutriscore_grade, nova_group,
+                    additives_json, nutriments_json, ingredients_text, categories, image_url
+             FROM products ORDER BY updated_at DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit], |row| {
+            let additives_json: Option<String> = row.get(5)?;
+            let nutriments_json: Option<String> = row.get(6)?;
+            Ok(Product {
+                code: row.get(0)?,
+                product_name: row.get(1)?,
+                brands: row.get(2)?,
+                nutriscore_grade: row.get(3)?,
+                nova_group: row.get(4)?,
+                additives_tags: additives_json.and_then(|s| serde_json::from_str(&s).ok()),
+                nutriments: nutriments_json.and_then(|s| serde_json::from_str(&s).ok()),
+                ingredients_text: row.get(7)?,
+                categories: row.get(8)?,
+                image_url: row.get(9)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Export all cached products as a JSON string.
+    pub fn export_json(&self) -> SqlResult<String> {
+        let products = self.recent(u32::MAX)?;
+        Ok(serde_json::to_string_pretty(&products).unwrap_or_else(|_| "[]".to_string()))
+    }
+
+    /// Return cache database size in bytes and product count.
+    pub fn size_info(&self) -> SqlResult<(i64, i64)> {
+        let count: i64 = self.count()?;
+        let page_count: i64 = self.conn.query_row("PRAGMA page_count", [], |r| r.get(0))?;
+        let page_size: i64 = self.conn.query_row("PRAGMA page_size", [], |r| r.get(0))?;
+        Ok((page_count * page_size, count))
+    }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -275,5 +316,52 @@ mod tests {
         assert_eq!(cache.count().unwrap(), 1);
         let p = cache.get_by_code("1").unwrap().unwrap();
         assert_eq!(p.product_name.as_deref(), Some("New"));
+    }
+
+    #[test]
+    fn test_recent_ordering() {
+        let cache = Cache::open_in_memory().unwrap();
+        cache.upsert(&sample_product("1", "First")).unwrap();
+        cache.upsert(&sample_product("2", "Second")).unwrap();
+        let recent = cache.recent(10).unwrap();
+        assert_eq!(recent.len(), 2);
+    }
+
+    #[test]
+    fn test_recent_limit() {
+        let cache = Cache::open_in_memory().unwrap();
+        for i in 0..5 {
+            cache.upsert(&sample_product(&i.to_string(), &format!("P{}", i))).unwrap();
+        }
+        let recent = cache.recent(3).unwrap();
+        assert_eq!(recent.len(), 3);
+    }
+
+    #[test]
+    fn test_export_json() {
+        let cache = Cache::open_in_memory().unwrap();
+        cache.upsert(&sample_product("1", "Export Test")).unwrap();
+        let json = cache.export_json().unwrap();
+        assert!(json.contains("Export Test"));
+        // Verify it's valid JSON
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.len(), 1);
+    }
+
+    #[test]
+    fn test_export_json_empty() {
+        let cache = Cache::open_in_memory().unwrap();
+        let json = cache.export_json().unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&json).unwrap();
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn test_size_info() {
+        let cache = Cache::open_in_memory().unwrap();
+        cache.upsert(&sample_product("1", "Size")).unwrap();
+        let (bytes, count) = cache.size_info().unwrap();
+        assert!(bytes > 0);
+        assert_eq!(count, 1);
     }
 }

@@ -56,6 +56,24 @@ enum Commands {
     },
     /// Show cache statistics
     Stats,
+    /// Show recently scanned/cached products
+    History {
+        /// Number of recent products to show
+        #[arg(short, long, default_value_t = 10)]
+        limit: u32,
+    },
+    /// Export cache to JSON file
+    Export {
+        /// Output file path
+        #[arg(short, long, default_value = "nutriscan-export.json")]
+        output: String,
+    },
+    /// Purge stale cache entries older than N days
+    Purge {
+        /// Maximum age in days
+        #[arg(short, long, default_value_t = 90)]
+        days: u32,
+    },
 }
 
 fn resolve_cache_path(raw: &str) -> PathBuf {
@@ -179,8 +197,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Commands::Stats => {
+            let (bytes, count) = db.size_info()?;
+            let kb = bytes as f64 / 1024.0;
+            println!("Cache: {} products stored ({:.1} KB)", count, kb);
+        }
+        Commands::History { limit } => {
+            let products = db.recent(limit)?;
+            if products.is_empty() {
+                println!("No cached products yet. Use 'scan' or 'update' to populate.");
+            } else {
+                println!("Last {} cached product(s):", products.len());
+                for (i, p) in products.iter().enumerate() {
+                    let name = p.product_name.as_deref().unwrap_or("Unknown");
+                    let brand = p.brands.as_deref().unwrap_or("");
+                    let grade = p.nutriscore_grade.as_deref().unwrap_or("?");
+                    println!("  {}. {} ({}) — Nutri-Score {}", i + 1, name, brand, grade.to_uppercase());
+                }
+            }
+        }
+        Commands::Export { output } => {
+            let json = db.export_json()?;
+            std::fs::write(&output, &json)?;
             let count = db.count()?;
-            println!("Cache: {} products stored.", count);
+            println!("Exported {} products to {}", count, output);
+        }
+        Commands::Purge { days } => {
+            let evicted = db.evict_stale(days)?;
+            println!("Purged {} stale entries (older than {} days).", evicted, days);
         }
     }
 

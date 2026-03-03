@@ -1,4 +1,4 @@
-use crate::analyzer::{Analysis, AdditiveWarning, NutriRating, NovaGroup};
+use crate::analyzer::{Analysis, AdditiveWarning, MacroBalance, NutriRating, NovaGroup};
 use crate::api::Product;
 use colored::*;
 
@@ -45,6 +45,16 @@ pub fn print_analysis(a: &Analysis) {
         for allergen in &a.allergens {
             println!("    • {}", allergen);
         }
+    }
+
+    match &a.macro_balance {
+        MacroBalance::HighIn(macro_name) => {
+            println!("  Macro balance: high in {}", macro_name);
+        }
+        MacroBalance::Balanced => {
+            println!("  Macro balance: balanced");
+        }
+        MacroBalance::Unknown => {}
     }
 
     if let Some(score) = a.health_score {

@@ -116,6 +116,11 @@ pub fn health_score(product: &Product) -> Option<u32> {
             has_data = true;
             if protein > 10.0 { score += 3.0; }
         }
+        if let Some(sat_fat) = n.saturated_fat_100g {
+            has_data = true;
+            if sat_fat > 5.0 { score -= 5.0; }
+            else if sat_fat < 1.0 { score += 2.0; }
+        }
     }
 
     if let Some(ref tags) = product.additives_tags {
@@ -234,6 +239,7 @@ pub struct Analysis {
     pub warnings: Vec<AdditiveWarning>,
     pub allergens: Vec<String>,
     pub health_score: Option<u32>,
+    pub macro_balance: MacroBalance,
     pub product: Product,
 }
 
@@ -268,6 +274,8 @@ pub fn analyze(product: &Product) -> Analysis {
     let allergens = detect_allergens(product.ingredients_text.as_deref());
     let score = health_score(product);
 
+    let macro_balance = assess_macro_balance(product);
+
     Analysis {
         product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
         brands: product.brands.clone().unwrap_or_else(|| "Unknown".into()),
@@ -276,6 +284,7 @@ pub fn analyze(product: &Product) -> Analysis {
         warnings,
         allergens,
         health_score: score,
+        macro_balance,
         product: product.clone(),
     }
 }
@@ -306,6 +315,34 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<(String, String, String
     }
 
     diffs
+}
+
+/// Macro-nutrient balance assessment.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MacroBalance {
+    Balanced,
+    HighIn(String),
+    Unknown,
+}
+
+/// Assess macro-nutrient balance from nutriments.
+pub fn assess_macro_balance(product: &Product) -> MacroBalance {
+    let n = match &product.nutriments {
+        Some(n) => n,
+        None => return MacroBalance::Unknown,
+    };
+    let fat = n.fat_100g.unwrap_or(0.0);
+    let carbs = n.carbohydrates_100g.unwrap_or(0.0);
+    let protein = n.proteins_100g.unwrap_or(0.0);
+    let total = fat + carbs + protein;
+    if total < 1.0 { return MacroBalance::Unknown; }
+    let fat_pct = fat / total * 100.0;
+    let carb_pct = carbs / total * 100.0;
+    let protein_pct = protein / total * 100.0;
+    if fat_pct > 60.0 { MacroBalance::HighIn("fat".to_string()) }
+    else if carb_pct > 75.0 { MacroBalance::HighIn("carbohydrates".to_string()) }
+    else if protein_pct > 60.0 { MacroBalance::HighIn("protein".to_string()) }
+    else { MacroBalance::Balanced }
 }
 
 #[cfg(test)]
@@ -438,5 +475,100 @@ mod tests {
         let sugar_row = diffs.iter().find(|(l, _, _)| l == "Sugars (g)").unwrap();
         assert_eq!(sugar_row.1, "10.0");
         assert_eq!(sugar_row.2, "30.0");
+    }
+
+    #[test]
+    fn test_health_score_saturated_fat_penalty() {
+        let mut p = make_product(Some("c"), Some(3), vec![]);
+        p.nutriments.as_mut().unwrap().saturated_fat_100g = Some(8.0);
+        let score = health_score(&p).unwrap();
+        let baseline = health_score(&make_product(Some("c"), Some(3), vec![])).unwrap();
+        assert!(score < baseline, "sat fat penalty: {} vs {}", score, baseline);
+    }
+
+    #[test]
+    fn test_health_score_low_sat_fat_bonus() {
+        let mut p = make_product(Some("c"), Some(3), vec![]);
+        p.nutriments.as_mut().unwrap().saturated_fat_100g = Some(0.5);
+        let score = health_score(&p).unwrap();
+        let baseline = health_score(&make_product(Some("c"), Some(3), vec![])).unwrap();
+        assert!(score > baseline, "low sat fat bonus: {} vs {}", score, baseline);
+    }
+
+    #[test]
+    fn test_health_score_clamps_max() {
+        let mut p = make_product(Some("a"), Some(1), vec![]);
+        let n = p.nutriments.as_mut().unwrap();
+        n.sugars_100g = Some(1.0);
+        n.salt_100g = Some(0.1);
+        n.fiber_100g = Some(10.0);
+        n.proteins_100g = Some(20.0);
+        n.saturated_fat_100g = Some(0.1);
+        let score = health_score(&p).unwrap();
+        assert!(score <= 100);
+    }
+
+    #[test]
+    fn test_health_score_clamps_min() {
+        let p = make_product(Some("e"), Some(4), vec![
+            "en:e150d", "en:e950", "en:e951", "en:e621", "en:e102",
+            "en:e110", "en:e122", "en:e211", "en:e250", "en:e320",
+        ]);
+        let score = health_score(&p).unwrap();
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_macro_balance_balanced() {
+        let p = make_product(Some("b"), Some(2), vec![]);
+        assert_eq!(assess_macro_balance(&p), MacroBalance::Balanced);
+    }
+
+    #[test]
+    fn test_macro_balance_high_fat() {
+        let mut p = make_product(Some("d"), Some(3), vec![]);
+        let n = p.nutriments.as_mut().unwrap();
+        n.fat_100g = Some(80.0);
+        n.carbohydrates_100g = Some(5.0);
+        n.proteins_100g = Some(2.0);
+        assert_eq!(assess_macro_balance(&p), MacroBalance::HighIn("fat".to_string()));
+    }
+
+    #[test]
+    fn test_macro_balance_no_data() {
+        let p = Product {
+            code: "1".into(), product_name: None, brands: None,
+            nutriscore_grade: None, nova_group: None, additives_tags: None,
+            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+        };
+        assert_eq!(assess_macro_balance(&p), MacroBalance::Unknown);
+    }
+
+    #[test]
+    fn test_allergen_dedup() {
+        let allergens = detect_allergens(Some("milk, lactose, cream"));
+        let dairy_count = allergens.iter().filter(|a| a.as_str() == "Milk/Dairy").count();
+        assert_eq!(dairy_count, 1);
+    }
+
+    #[test]
+    fn test_compare_missing_nutriments() {
+        let a = make_product(Some("a"), Some(1), vec![]);
+        let b = Product {
+            code: "2".into(), product_name: Some("Empty".into()), brands: None,
+            nutriscore_grade: None, nova_group: None, additives_tags: None,
+            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+        };
+        let diffs = compare_products(&a, &b);
+        for (_, _, vb) in &diffs { assert_eq!(vb, "\u{2014}"); }
+    }
+
+    #[test]
+    fn test_additive_warning_all_known() {
+        let p = make_product(Some("e"), Some(4), vec![
+            "en:e150d", "en:e950", "en:e951", "en:e621", "en:e102",
+        ]);
+        let a = analyze(&p);
+        assert_eq!(a.warnings.len(), 5);
     }
 }
