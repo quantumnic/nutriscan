@@ -108,7 +108,6 @@ fn urlencoded(s: &str) -> String {
 #[derive(Debug)]
 pub enum ApiError {
     Http(reqwest::Error),
-    #[allow(dead_code)]
     #[allow(dead_code)] Parse(String),
 }
 

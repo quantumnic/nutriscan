@@ -44,6 +44,16 @@ enum Commands {
         #[arg(short, long, default_value_t = 50)]
         limit: u32,
     },
+    /// Look up a product by barcode
+    Barcode {
+        /// EAN/UPC barcode number
+        code: String,
+    },
+    /// Search offline cache only (no network)
+    Offline {
+        /// Search term
+        query: String,
+    },
     /// Show cache statistics
     Stats,
 }
@@ -137,6 +147,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 db.upsert(p)?;
             }
             println!("Cached {} products.", count);
+        }
+        Commands::Barcode { code } => {
+            // Try cache first
+            if let Some(p) = db.get_by_code(&code)? {
+                println!("(from cache)");
+                let a = analyzer::analyze(&p);
+                display::print_analysis(&a);
+            } else {
+                println!("Looking up barcode {}...", code);
+                match api.get_by_barcode(&code).await? {
+                    Some(p) => {
+                        db.upsert(&p)?;
+                        let a = analyzer::analyze(&p);
+                        display::print_analysis(&a);
+                    }
+                    None => println!("No product found for barcode '{}'.", code),
+                }
+            }
+        }
+        Commands::Offline { query } => {
+            let cached = db.search(&query)?;
+            if cached.is_empty() {
+                println!("No cached products matching '{}'. Use 'update' to populate the cache.", query);
+            } else {
+                println!("({} result(s) from cache)", cached.len());
+                for p in &cached {
+                    let a = analyzer::analyze(p);
+                    display::print_analysis(&a);
+                }
+            }
         }
         Commands::Stats => {
             let count = db.count()?;

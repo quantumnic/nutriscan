@@ -14,7 +14,123 @@ fn additive_warnings() -> HashMap<&'static str, &'static str> {
     m.insert("en:e211", "Sodium benzoate — preservative, may form benzene with vitamin C");
     m.insert("en:e250", "Sodium nitrite — preservative, potentially carcinogenic");
     m.insert("en:e320", "BHA — antioxidant, possible endocrine disruptor");
+    m.insert("en:e171", "Titanium dioxide — banned in EU as food additive");
+    m.insert("en:e133", "Brilliant Blue — synthetic dye, limited studies");
+    m.insert("en:e129", "Allura Red — azo dye, may cause hyperactivity");
+    m.insert("en:e952", "Cyclamate — artificial sweetener, banned in some countries");
+    m.insert("en:e955", "Sucralose — artificial sweetener, may affect gut microbiome");
     m
+}
+
+/// Common allergens detected from ingredients text.
+const ALLERGEN_KEYWORDS: &[(&str, &str)] = &[
+    ("milk", "Milk/Dairy"),
+    ("lactose", "Milk/Dairy"),
+    ("cream", "Milk/Dairy"),
+    ("butter", "Milk/Dairy"),
+    ("whey", "Milk/Dairy"),
+    ("casein", "Milk/Dairy"),
+    ("gluten", "Gluten"),
+    ("wheat", "Wheat/Gluten"),
+    ("barley", "Barley/Gluten"),
+    ("soy", "Soy"),
+    ("soya", "Soy"),
+    ("peanut", "Peanuts"),
+    ("almond", "Tree nuts"),
+    ("hazelnut", "Tree nuts"),
+    ("walnut", "Tree nuts"),
+    ("cashew", "Tree nuts"),
+    ("egg", "Eggs"),
+    ("fish", "Fish"),
+    ("shellfish", "Shellfish"),
+    ("shrimp", "Shellfish"),
+    ("sesame", "Sesame"),
+    ("mustard", "Mustard"),
+    ("celery", "Celery"),
+    ("lupin", "Lupin"),
+    ("sulphite", "Sulphites"),
+    ("sulfite", "Sulphites"),
+];
+
+/// Detect potential allergens from ingredients text.
+pub fn detect_allergens(ingredients: Option<&str>) -> Vec<String> {
+    let Some(text) = ingredients else {
+        return Vec::new();
+    };
+    let lower = text.to_lowercase();
+    let mut found: Vec<String> = ALLERGEN_KEYWORDS
+        .iter()
+        .filter(|(keyword, _)| lower.contains(keyword))
+        .map(|(_, allergen)| allergen.to_string())
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// Compute a simple 0-100 health score based on available data.
+pub fn health_score(product: &Product) -> Option<u32> {
+    let mut score: f64 = 50.0;
+    let mut has_data = false;
+
+    if let Some(ref grade) = product.nutriscore_grade {
+        has_data = true;
+        match grade.to_lowercase().as_str() {
+            "a" => score += 25.0,
+            "b" => score += 12.0,
+            "c" => {}
+            "d" => score -= 12.0,
+            "e" => score -= 25.0,
+            _ => {}
+        }
+    }
+
+    if let Some(nova) = product.nova_group {
+        has_data = true;
+        match nova {
+            1 => score += 15.0,
+            2 => score += 5.0,
+            3 => score -= 5.0,
+            4 => score -= 15.0,
+            _ => {}
+        }
+    }
+
+    if let Some(ref n) = product.nutriments {
+        if let Some(sugar) = n.sugars_100g {
+            has_data = true;
+            if sugar > 20.0 { score -= 5.0; }
+            else if sugar < 5.0 { score += 3.0; }
+        }
+        if let Some(salt) = n.salt_100g {
+            has_data = true;
+            if salt > 1.5 { score -= 5.0; }
+            else if salt < 0.3 { score += 2.0; }
+        }
+        if let Some(fiber) = n.fiber_100g {
+            has_data = true;
+            if fiber > 5.0 { score += 5.0; }
+            else if fiber > 3.0 { score += 2.0; }
+        }
+        if let Some(protein) = n.proteins_100g {
+            has_data = true;
+            if protein > 10.0 { score += 3.0; }
+        }
+    }
+
+    if let Some(ref tags) = product.additives_tags {
+        let known = additive_warnings();
+        let bad_count = tags.iter().filter(|t| known.contains_key(t.as_str())).count();
+        if bad_count > 0 {
+            has_data = true;
+            score -= (bad_count as f64) * 3.0;
+        }
+    }
+
+    if !has_data {
+        return None;
+    }
+    Some(score.clamp(0.0, 100.0) as u32)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -116,6 +232,8 @@ pub struct Analysis {
     pub nutri_rating: NutriRating,
     pub nova: NovaGroup,
     pub warnings: Vec<AdditiveWarning>,
+    pub allergens: Vec<String>,
+    pub health_score: Option<u32>,
     pub product: Product,
 }
 
@@ -147,12 +265,17 @@ pub fn analyze(product: &Product) -> Analysis {
         })
         .unwrap_or_default();
 
+    let allergens = detect_allergens(product.ingredients_text.as_deref());
+    let score = health_score(product);
+
     Analysis {
         product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
         brands: product.brands.clone().unwrap_or_else(|| "Unknown".into()),
         nutri_rating,
         nova,
         warnings,
+        allergens,
+        health_score: score,
         product: product.clone(),
     }
 }
@@ -244,6 +367,67 @@ mod tests {
         assert!(a.warnings.is_empty());
     }
 
+
+    #[test]
+    fn test_detect_allergens_found() {
+        let allergens = detect_allergens(Some("water, milk, wheat flour, soy lecithin"));
+        assert!(allergens.contains(&"Milk/Dairy".to_string()));
+        assert!(allergens.contains(&"Wheat/Gluten".to_string()));
+        assert!(allergens.contains(&"Soy".to_string()));
+    }
+
+    #[test]
+    fn test_detect_allergens_none() {
+        let allergens = detect_allergens(Some("water, sugar, salt"));
+        assert!(allergens.is_empty());
+    }
+
+    #[test]
+    fn test_detect_allergens_no_text() {
+        let allergens = detect_allergens(None);
+        assert!(allergens.is_empty());
+    }
+
+    #[test]
+    fn test_health_score_excellent() {
+        let p = make_product(Some("a"), Some(1), vec![]);
+        let score = health_score(&p).unwrap();
+        assert!(score >= 80, "Expected high score, got {}", score);
+    }
+
+    #[test]
+    fn test_health_score_poor() {
+        let p = make_product(Some("e"), Some(4), vec!["en:e150d", "en:e951"]);
+        let score = health_score(&p).unwrap();
+        assert!(score <= 30, "Expected low score, got {}", score);
+    }
+
+    #[test]
+    fn test_health_score_no_data() {
+        let p = Product {
+            code: "1".into(),
+            product_name: None,
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: None,
+            ingredients_text: None,
+            categories: None,
+            image_url: None,
+        };
+        assert!(health_score(&p).is_none());
+    }
+
+    #[test]
+    fn test_analyze_includes_allergens() {
+        let mut p = make_product(Some("b"), Some(2), vec![]);
+        p.ingredients_text = Some("water, milk, egg".to_string());
+        let a = analyze(&p);
+        assert!(a.allergens.contains(&"Milk/Dairy".to_string()));
+        assert!(a.allergens.contains(&"Eggs".to_string()));
+        assert!(a.health_score.is_some());
+    }
     #[test]
     fn test_compare_products() {
         let a = make_product(Some("a"), Some(1), vec![]);

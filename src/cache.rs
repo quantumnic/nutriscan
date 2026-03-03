@@ -129,6 +129,26 @@ impl Cache {
         self.conn.query_row("SELECT COUNT(*) FROM products", [], |row| row.get(0))
     }
 
+    /// Remove products older than `days` from the cache.
+    #[allow(dead_code)]
+    pub fn evict_stale(&self, days: u32) -> SqlResult<usize> {
+        let affected = self.conn.execute(
+            "DELETE FROM products WHERE updated_at < datetime('now', ?1)",
+            params![format!("-{} days", days)],
+        )?;
+        Ok(affected)
+    }
+
+    /// Return codes of products older than `days`.
+    #[allow(dead_code)]
+    pub fn stale_codes(&self, days: u32) -> SqlResult<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT code FROM products WHERE updated_at < datetime('now', ?1)",
+        )?;
+        let rows = stmt.query_map(params![format!("-{} days", days)], |row| row.get(0))?;
+        rows.collect()
+    }
+
     #[allow(dead_code)]
     pub fn clear(&self) -> SqlResult<()> {
         self.conn.execute("DELETE FROM products", [])?;
@@ -208,6 +228,43 @@ mod tests {
         cache.upsert(&sample_product("1", "A")).unwrap();
         cache.clear().unwrap();
         assert_eq!(cache.count().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_search_by_brand() {
+        let cache = Cache::open_in_memory().unwrap();
+        let mut p = sample_product("333", "Mystery Drink");
+        p.brands = Some("SpecialBrand".to_string());
+        cache.upsert(&p).unwrap();
+        let results = cache.search("SpecialBrand").unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_search_by_category() {
+        let cache = Cache::open_in_memory().unwrap();
+        let mut p = sample_product("444", "Juice");
+        p.categories = Some("fruit juices".to_string());
+        cache.upsert(&p).unwrap();
+        let results = cache.search("fruit").unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_evict_stale_no_stale() {
+        let cache = Cache::open_in_memory().unwrap();
+        cache.upsert(&sample_product("1", "Fresh")).unwrap();
+        let evicted = cache.evict_stale(30).unwrap();
+        assert_eq!(evicted, 0);
+        assert_eq!(cache.count().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_stale_codes_empty() {
+        let cache = Cache::open_in_memory().unwrap();
+        cache.upsert(&sample_product("1", "Fresh")).unwrap();
+        let stale = cache.stale_codes(30).unwrap();
+        assert!(stale.is_empty());
     }
 
     #[test]

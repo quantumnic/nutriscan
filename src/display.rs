@@ -38,6 +38,25 @@ pub fn print_analysis(a: &Analysis) {
             println!("    {} — {}", w.code.red(), w.description);
         }
     }
+
+    if !a.allergens.is_empty() {
+        println!();
+        println!("{}", "  🥜 Potential Allergens:".bold().magenta());
+        for allergen in &a.allergens {
+            println!("    • {}", allergen);
+        }
+    }
+
+    if let Some(score) = a.health_score {
+        let (emoji, color_label) = match score {
+            80..=100 => ("💚", format!("{}/100 — Excellent", score).green()),
+            60..=79 => ("💛", format!("{}/100 — Good", score).yellow()),
+            40..=59 => ("🧡", format!("{}/100 — Moderate", score).yellow()),
+            20..=39 => ("❤️", format!("{}/100 — Poor", score).red()),
+            _ => ("🖤", format!("{}/100 — Bad", score).red().bold()),
+        };
+        println!("  Health Score: {} {}", emoji, color_label);
+    }
     println!();
 }
 
