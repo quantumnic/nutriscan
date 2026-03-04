@@ -206,3 +206,43 @@ pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary) {
     println!("  💡 {}", colored_verdict);
     println!();
 }
+
+pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily::DailySummary)]) {
+    println!();
+    println!("{}", format!("═══ Weekly Summary: {} → {} ═══", from, to).bold().cyan());
+
+    if days.is_empty() {
+        println!("  No products logged in this period.");
+        println!();
+        return;
+    }
+
+    let mut week_kcal = 0.0_f64;
+    let mut week_protein = 0.0_f64;
+    let mut week_fat = 0.0_f64;
+    let mut week_carbs = 0.0_f64;
+
+    for (date, summary) in days {
+        let n = summary.entries.len();
+        println!(
+            "  {} — {:>6.0} kcal  ({} item{})",
+            date,
+            summary.total_kcal,
+            n,
+            if n == 1 { "" } else { "s" }
+        );
+        week_kcal += summary.total_kcal;
+        week_protein += summary.total_protein;
+        week_fat += summary.total_fat;
+        week_carbs += summary.total_carbs;
+    }
+
+    let logged_days = days.len() as f64;
+    println!();
+    println!("{}", "  Averages per logged day:".bold());
+    println!("    Energy:  {:.0} kcal", week_kcal / logged_days);
+    println!("    Protein: {:.1} g", week_protein / logged_days);
+    println!("    Fat:     {:.1} g", week_fat / logged_days);
+    println!("    Carbs:   {:.1} g", week_carbs / logged_days);
+    println!();
+}

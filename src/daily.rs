@@ -144,6 +144,24 @@ impl DailyLog {
             |row| row.get(0),
         )
     }
+
+    /// Get summaries for a date range (inclusive).
+    pub fn date_range_summary(&self, from: &str, to: &str) -> SqlResult<Vec<(String, DailySummary)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT date FROM daily_log WHERE date >= ?1 AND date <= ?2 ORDER BY date",
+        )?;
+        let dates: Vec<String> = stmt
+            .query_map(params![from, to], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        let mut results = Vec::new();
+        for date in dates {
+            let summary = self.summary(&date)?;
+            results.push((date, summary));
+        }
+        Ok(results)
+    }
+
 }
 
 #[cfg(test)]
@@ -260,4 +278,19 @@ mod tests {
         assert_eq!(s.entries.len(), 1);
         assert!(s.total_kcal.abs() < 0.01);
     }
+
+    #[test]
+    fn test_date_range_summary() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let p = sample_product("1", "Oats", 100.0);
+        log.log_product("2026-03-01", &p, 1.0).unwrap();
+        log.log_product("2026-03-03", &p, 2.0).unwrap();
+        log.log_product("2026-03-05", &p, 1.0).unwrap();
+        let range = log.date_range_summary("2026-03-01", "2026-03-04").unwrap();
+        assert_eq!(range.len(), 2);
+        assert_eq!(range[0].0, "2026-03-01");
+        assert_eq!(range[1].0, "2026-03-03");
+        assert!((range[1].1.total_kcal - 200.0).abs() < 0.01);
+    }
+
 }

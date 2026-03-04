@@ -85,6 +85,9 @@ enum Commands {
     },
     /// Show today's intake summary (or a specific date)
     Daily {
+        /// Show last 7 days instead of a single day
+        #[arg(short, long)]
+        week: bool,
         /// Date in YYYY-MM-DD format (defaults to today)
         #[arg(short, long)]
         date: Option<String>,
@@ -143,6 +146,28 @@ fn days_to_ymd(days: u64) -> (u64, u64, u64) {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
     (y, m, d)
+}
+
+
+fn date_minus_days(date: &str, n: u64) -> String {
+    let parts: Vec<u64> = date.split('-').filter_map(|s| s.parse().ok()).collect();
+    if parts.len() != 3 { return date.to_string(); }
+    let (y, m, d) = (parts[0], parts[1], parts[2]);
+    // Convert to days since epoch, subtract, convert back
+    let days = ymd_to_days(y, m, d).saturating_sub(n);
+    let (y2, m2, d2) = days_to_ymd(days);
+    format!("{:04}-{:02}-{:02}", y2, m2, d2)
+}
+
+fn ymd_to_days(y: u64, m: u64, d: u64) -> u64 {
+    // Inverse of days_to_ymd (Howard Hinnant algorithm)
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y / 400;
+    let yoe = y - era * 400;
+    let m_adj = if m > 2 { m - 3 } else { m + 9 };
+    let doy = (153 * m_adj + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
 }
 
 #[tokio::main]
@@ -296,10 +321,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None => println!("Product '{}' not found.", query),
             }
         }
-        Commands::Daily { date } => {
-            let date = date.unwrap_or_else(today);
-            let summary = daily_log.summary(&date)?;
-            display::print_daily_summary(&date, &summary);
+        Commands::Daily { date, week } => {
+            if week {
+                let end = date.clone().unwrap_or_else(today);
+                let start = date_minus_days(&end, 6);
+                let range = daily_log.date_range_summary(&start, &end)?;
+                display::print_weekly_summary(&start, &end, &range);
+            } else {
+                let date = date.unwrap_or_else(today);
+                let summary = daily_log.summary(&date)?;
+                display::print_daily_summary(&date, &summary);
+            }
         }
         Commands::ClearDay { date } => {
             let date = date.unwrap_or_else(today);
@@ -391,4 +423,18 @@ mod tests {
         assert_eq!(&t[4..5], "-");
         assert_eq!(&t[7..8], "-");
     }
+
+    #[test]
+    fn test_ymd_to_days_roundtrip() {
+        let days = ymd_to_days(2026, 3, 4);
+        let (y, m, d) = days_to_ymd(days);
+        assert_eq!((y, m, d), (2026, 3, 4));
+    }
+
+    #[test]
+    fn test_date_minus_days() {
+        assert_eq!(date_minus_days("2026-03-04", 6), "2026-02-26");
+        assert_eq!(date_minus_days("2026-01-03", 3), "2025-12-31");
+    }
+
 }
