@@ -224,6 +224,9 @@ pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily:
     let mut week_fat = 0.0_f64;
     let mut week_carbs = 0.0_f64;
     let mut week_sat_fat = 0.0_f64;
+    let mut week_sugar = 0.0_f64;
+    let mut week_salt = 0.0_f64;
+    let mut week_fiber = 0.0_f64;
 
     for (date, summary) in days {
         let n = summary.entries.len();
@@ -239,6 +242,9 @@ pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily:
         week_fat += summary.total_fat;
         week_carbs += summary.total_carbs;
         week_sat_fat += summary.total_saturated_fat;
+        week_sugar += summary.total_sugar;
+        week_salt += summary.total_salt;
+        week_fiber += summary.total_fiber;
     }
 
     let logged_days = days.len() as f64;
@@ -249,5 +255,8 @@ pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily:
     println!("    Fat:     {:.1} g", week_fat / logged_days);
     println!("    Carbs:   {:.1} g", week_carbs / logged_days);
     println!("    Sat Fat: {:.1} g", week_sat_fat / logged_days);
+    println!("    Sugar:   {:.1} g", week_sugar / logged_days);
+    println!("    Salt:    {:.2} g", week_salt / logged_days);
+    println!("    Fiber:   {:.1} g", week_fiber / logged_days);
     println!();
 }
