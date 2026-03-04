@@ -31,15 +31,33 @@ pub struct DailySummary {
 
 impl DailySummary {
     /// Quick textual verdict on the day's intake.
-    pub fn verdict(&self) -> &'static str {
+    pub fn verdict(&self) -> String {
         if self.entries.is_empty() {
-            return "No entries logged today.";
+            return "No entries logged today.".to_string();
         }
-        match self.total_kcal as u32 {
+        let mut warnings: Vec<&str> = Vec::new();
+
+        let cal_msg = match self.total_kcal as u32 {
             0..=1200 => "Low calorie intake — make sure you're eating enough!",
             1201..=2200 => "Calorie intake looks reasonable.",
             2201..=2800 => "Slightly above average — fine if you're active.",
             _ => "High calorie intake — consider lighter options.",
+        };
+
+        if self.total_salt > 5.0 {
+            warnings.push("⚠ Salt exceeds 5 g (WHO daily limit).");
+        }
+        if self.total_sugar > 50.0 {
+            warnings.push("⚠ Sugar exceeds 50 g (WHO daily limit).");
+        }
+        if self.total_saturated_fat > 20.0 {
+            warnings.push("⚠ Saturated fat exceeds 20 g (recommended limit).");
+        }
+
+        if warnings.is_empty() {
+            cal_msg.to_string()
+        } else {
+            format!("{} {}", cal_msg, warnings.join(" "))
         }
     }
 }
@@ -329,5 +347,74 @@ mod sat_fat_tests {
         log.log_product("2026-03-04", &p, 2.0).unwrap();
         let s = log.summary("2026-03-04").unwrap();
         assert!((s.total_saturated_fat - 36.0).abs() < 0.01);
+    }
+}
+
+#[cfg(test)]
+mod verdict_warning_tests {
+    use super::*;
+
+    #[test]
+    fn test_verdict_high_salt_warning() {
+        let s = DailySummary {
+            entries: vec![DailyEntry {
+                code: "000".to_string(), product_name: "Salty Chips".to_string(), logged_at: "12:00".to_string(),
+                servings: 1.0,
+            }],
+            total_kcal: 1500.0,
+            total_fat: 10.0,
+            total_carbs: 50.0,
+            total_protein: 20.0,
+            total_sugar: 10.0,
+            total_salt: 6.5,
+            total_fiber: 3.0,
+            total_saturated_fat: 5.0,
+        };
+        let v = s.verdict();
+        assert!(v.contains("Salt exceeds 5 g"), "got: {v}");
+        assert!(!v.contains("Sugar exceeds"), "got: {v}");
+    }
+
+    #[test]
+    fn test_verdict_high_sugar_warning() {
+        let s = DailySummary {
+            entries: vec![DailyEntry {
+                code: "000".to_string(), product_name: "Candy".to_string(), logged_at: "12:00".to_string(),
+                servings: 1.0,
+            }],
+            total_kcal: 1800.0,
+            total_fat: 5.0,
+            total_carbs: 80.0,
+            total_protein: 5.0,
+            total_sugar: 65.0,
+            total_salt: 1.0,
+            total_fiber: 1.0,
+            total_saturated_fat: 2.0,
+        };
+        let v = s.verdict();
+        assert!(v.contains("Sugar exceeds 50 g"), "got: {v}");
+    }
+
+    #[test]
+    fn test_verdict_multiple_warnings() {
+        let s = DailySummary {
+            entries: vec![DailyEntry {
+                code: "000".to_string(), product_name: "Junk".to_string(), logged_at: "12:00".to_string(),
+                servings: 1.0,
+            }],
+            total_kcal: 3000.0,
+            total_fat: 50.0,
+            total_carbs: 100.0,
+            total_protein: 30.0,
+            total_sugar: 80.0,
+            total_salt: 7.0,
+            total_fiber: 2.0,
+            total_saturated_fat: 25.0,
+        };
+        let v = s.verdict();
+        assert!(v.contains("Salt exceeds"), "got: {v}");
+        assert!(v.contains("Sugar exceeds"), "got: {v}");
+        assert!(v.contains("Saturated fat exceeds"), "got: {v}");
+        assert!(v.contains("High calorie"), "got: {v}");
     }
 }
