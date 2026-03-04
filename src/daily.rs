@@ -26,6 +26,7 @@ pub struct DailySummary {
     pub total_sugar: f64,
     pub total_salt: f64,
     pub total_fiber: f64,
+    pub total_saturated_fat: f64,
 }
 
 impl DailySummary {
@@ -119,6 +120,7 @@ impl DailyLog {
                 summary.total_sugar += n.sugars_100g.unwrap_or(0.0) * servings;
                 summary.total_salt += n.salt_100g.unwrap_or(0.0) * servings;
                 summary.total_fiber += n.fiber_100g.unwrap_or(0.0) * servings;
+                summary.total_saturated_fat += n.saturated_fat_100g.unwrap_or(0.0) * servings;
             }
             summary.entries.push(entry);
         }
@@ -293,4 +295,39 @@ mod tests {
         assert!((range[1].1.total_kcal - 200.0).abs() < 0.01);
     }
 
+}
+
+#[cfg(test)]
+mod sat_fat_tests {
+    use super::*;
+    use crate::api::{Nutriments, Product};
+
+    #[test]
+    fn test_summary_tracks_saturated_fat() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let p = Product {
+            code: "1".to_string(),
+            product_name: Some("Cheese".to_string()),
+            brands: Some("Brand".to_string()),
+            nutriscore_grade: Some("d".to_string()),
+            nova_group: Some(3),
+            additives_tags: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(350.0),
+                fat_100g: Some(28.0),
+                saturated_fat_100g: Some(18.0),
+                sugars_100g: Some(0.5),
+                salt_100g: Some(1.8),
+                proteins_100g: Some(25.0),
+                fiber_100g: Some(0.0),
+                carbohydrates_100g: Some(1.3),
+            }),
+            ingredients_text: None,
+            categories: None,
+            image_url: None,
+        };
+        log.log_product("2026-03-04", &p, 2.0).unwrap();
+        let s = log.summary("2026-03-04").unwrap();
+        assert!((s.total_saturated_fat - 36.0).abs() < 0.01);
+    }
 }
