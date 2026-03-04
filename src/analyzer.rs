@@ -302,6 +302,7 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<(String, String, String
         ("Salt (g)", Box::new(|n| n.salt_100g)),
         ("Proteins (g)", Box::new(|n| n.proteins_100g)),
         ("Fiber (g)", Box::new(|n| n.fiber_100g)),
+        ("Sat. Fat (g)", Box::new(|n| n.saturated_fat_100g)),
     ];
 
     for (label, getter) in &fields {
@@ -471,7 +472,7 @@ mod tests {
         let mut b = make_product(Some("d"), Some(4), vec![]);
         b.nutriments.as_mut().unwrap().sugars_100g = Some(30.0);
         let diffs = compare_products(&a, &b);
-        assert!(diffs.len() >= 5);
+        assert!(diffs.len() >= 6);
         let sugar_row = diffs.iter().find(|(l, _, _)| l == "Sugars (g)").unwrap();
         assert_eq!(sugar_row.1, "10.0");
         assert_eq!(sugar_row.2, "30.0");
