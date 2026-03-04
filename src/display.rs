@@ -164,3 +164,45 @@ mod tests {
         assert!(s.contains("Ultra-processed"));
     }
 }
+
+pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary) {
+    println!();
+    println!("{}", format!("═══ Daily Intake: {} ═══", date).bold().cyan());
+
+    if summary.entries.is_empty() {
+        println!("  No products logged for this day.");
+        println!("  Use 'nutriscan log <product>' to start tracking.");
+        println!();
+        return;
+    }
+
+    println!("{}", "  Products:".bold());
+    for (i, entry) in summary.entries.iter().enumerate() {
+        println!(
+            "    {}. {} — {:.1} serving(s)",
+            i + 1,
+            entry.product_name,
+            entry.servings
+        );
+    }
+
+    println!();
+    println!("{}", "  Totals (estimated):".bold());
+    println!("    Energy:      {:.0} kcal", summary.total_kcal);
+    println!("    Fat:         {:.1} g", summary.total_fat);
+    println!("    Carbs:       {:.1} g", summary.total_carbs);
+    println!("    Protein:     {:.1} g", summary.total_protein);
+    println!("    Sugar:       {:.1} g", summary.total_sugar);
+    println!("    Salt:        {:.2} g", summary.total_salt);
+    println!("    Fiber:       {:.1} g", summary.total_fiber);
+
+    println!();
+    let verdict = summary.verdict();
+    let colored_verdict = if verdict.contains("Low") || verdict.contains("High") {
+        verdict.yellow()
+    } else {
+        verdict.green()
+    };
+    println!("  💡 {}", colored_verdict);
+    println!();
+}

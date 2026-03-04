@@ -1,6 +1,7 @@
 mod api;
 mod analyzer;
 mod cache;
+mod daily;
 mod display;
 
 use clap::{Parser, Subcommand};
@@ -74,6 +75,35 @@ enum Commands {
         #[arg(short, long, default_value_t = 90)]
         days: u32,
     },
+    /// Log a product to daily intake tracker
+    Log {
+        /// Product name or barcode
+        query: String,
+        /// Number of servings (each = 100g)
+        #[arg(short, long, default_value_t = 1.0)]
+        servings: f64,
+    },
+    /// Show today's intake summary (or a specific date)
+    Daily {
+        /// Date in YYYY-MM-DD format (defaults to today)
+        #[arg(short, long)]
+        date: Option<String>,
+    },
+    /// Clear daily log for a date
+    ClearDay {
+        /// Date in YYYY-MM-DD format (defaults to today)
+        #[arg(short, long)]
+        date: Option<String>,
+    },
+    /// Refresh stale cache entries from the API
+    Refresh {
+        /// Maximum age in days before considering stale
+        #[arg(short, long, default_value_t = 30)]
+        days: u32,
+        /// Maximum number of entries to refresh
+        #[arg(short, long, default_value_t = 20)]
+        limit: u32,
+    },
 }
 
 fn resolve_cache_path(raw: &str) -> PathBuf {
@@ -89,6 +119,32 @@ fn dirs_fallback() -> Option<String> {
     std::env::var("HOME").ok()
 }
 
+fn today() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    // Simple date calculation (UTC)
+    let days = now / 86400;
+    let (y, m, d) = days_to_ymd(days);
+    format!("{:04}-{:02}-{:02}", y, m, d)
+}
+
+fn days_to_ymd(days: u64) -> (u64, u64, u64) {
+    // Algorithm from http://howardhinnant.github.io/date_algorithms.html
+    let z = days + 719468;
+    let era = z / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
@@ -101,9 +157,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = cache::Cache::open(&cache_path)?;
     let api = api::OpenFoodFactsApi::new();
 
+    // Daily log lives next to the cache
+    let daily_path = cache_path.with_extension("daily.db");
+    let daily_log = daily::DailyLog::open(&daily_path)?;
+
     match cli.command {
         Commands::Scan { query } => {
-            // Try cache first
             let cached = db.search(&query)?;
             if !cached.is_empty() {
                 println!("(from cache)");
@@ -167,7 +226,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Cached {} products.", count);
         }
         Commands::Barcode { code } => {
-            // Try cache first
             if let Some(p) = db.get_by_code(&code)? {
                 println!("(from cache)");
                 let a = analyzer::analyze(&p);
@@ -225,6 +283,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let evicted = db.evict_stale(days)?;
             println!("Purged {} stale entries (older than {} days).", evicted, days);
         }
+        Commands::Log { query, servings } => {
+            let product = find_product(&db, &api, &query).await?;
+            match product {
+                Some(p) => {
+                    let date = today();
+                    let name = p.product_name.clone().unwrap_or_else(|| "Unknown".into());
+                    daily_log.log_product(&date, &p, servings)?;
+                    db.upsert(&p)?;
+                    println!("✅ Logged {:.1}× {} for {}", servings, name, date);
+                }
+                None => println!("Product '{}' not found.", query),
+            }
+        }
+        Commands::Daily { date } => {
+            let date = date.unwrap_or_else(today);
+            let summary = daily_log.summary(&date)?;
+            display::print_daily_summary(&date, &summary);
+        }
+        Commands::ClearDay { date } => {
+            let date = date.unwrap_or_else(today);
+            let removed = daily_log.clear_date(&date)?;
+            println!("Cleared {} entries for {}.", removed, date);
+        }
+        Commands::Refresh { days, limit } => {
+            let stale = db.stale_codes(days)?;
+            if stale.is_empty() {
+                println!("No stale entries (all updated within {} days).", days);
+                return Ok(());
+            }
+            let to_refresh = &stale[..stale.len().min(limit as usize)];
+            println!("Refreshing {} stale product(s)...", to_refresh.len());
+            let mut refreshed = 0u32;
+            for code in to_refresh {
+                match api.get_by_barcode(code).await {
+                    Ok(Some(p)) => {
+                        db.upsert(&p)?;
+                        refreshed += 1;
+                    }
+                    Ok(None) => {
+                        // Product gone from API; leave cache as-is
+                    }
+                    Err(e) => {
+                        eprintln!("  Failed to refresh {}: {}", code, e);
+                    }
+                }
+            }
+            println!("Refreshed {}/{} products.", refreshed, to_refresh.len());
+        }
     }
 
     Ok(())
@@ -245,5 +351,44 @@ async fn find_product(
         Ok(Some(p))
     } else {
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_cache_path_tilde() {
+        std::env::set_var("HOME", "/test/home");
+        let p = resolve_cache_path("~/.nutriscan/cache.db");
+        assert_eq!(p, PathBuf::from("/test/home/.nutriscan/cache.db"));
+    }
+
+    #[test]
+    fn test_resolve_cache_path_absolute() {
+        let p = resolve_cache_path("/tmp/cache.db");
+        assert_eq!(p, PathBuf::from("/tmp/cache.db"));
+    }
+
+    #[test]
+    fn test_days_to_ymd_epoch() {
+        let (y, m, d) = days_to_ymd(0);
+        assert_eq!((y, m, d), (1970, 1, 1));
+    }
+
+    #[test]
+    fn test_days_to_ymd_known_date() {
+        // 2026-03-04 = day 20516 from epoch
+        let (y, m, d) = days_to_ymd(20516);
+        assert_eq!((y, m, d), (2026, 3, 4));
+    }
+
+    #[test]
+    fn test_today_format() {
+        let t = today();
+        assert_eq!(t.len(), 10);
+        assert_eq!(&t[4..5], "-");
+        assert_eq!(&t[7..8], "-");
     }
 }

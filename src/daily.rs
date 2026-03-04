@@ -1,0 +1,263 @@
+use crate::api::{Nutriments, Product};
+use rusqlite::{params, Connection, Result as SqlResult};
+use std::path::Path;
+
+/// Tracks daily food intake with per-serving logging.
+pub struct DailyLog {
+    conn: Connection,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct DailyEntry {
+    pub code: String,
+    pub product_name: String,
+    pub servings: f64,
+    pub logged_at: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DailySummary {
+    pub entries: Vec<DailyEntry>,
+    pub total_kcal: f64,
+    pub total_fat: f64,
+    pub total_carbs: f64,
+    pub total_protein: f64,
+    pub total_sugar: f64,
+    pub total_salt: f64,
+    pub total_fiber: f64,
+}
+
+impl DailySummary {
+    /// Quick textual verdict on the day's intake.
+    pub fn verdict(&self) -> &'static str {
+        if self.entries.is_empty() {
+            return "No entries logged today.";
+        }
+        match self.total_kcal as u32 {
+            0..=1200 => "Low calorie intake — make sure you're eating enough!",
+            1201..=2200 => "Calorie intake looks reasonable.",
+            2201..=2800 => "Slightly above average — fine if you're active.",
+            _ => "High calorie intake — consider lighter options.",
+        }
+    }
+}
+
+impl DailyLog {
+    pub fn open<P: AsRef<Path>>(path: P) -> SqlResult<Self> {
+        let conn = Connection::open(path)?;
+        let log = Self { conn };
+        log.init_tables()?;
+        Ok(log)
+    }
+
+    #[allow(dead_code)]
+    pub fn open_in_memory() -> SqlResult<Self> {
+        let conn = Connection::open_in_memory()?;
+        let log = Self { conn };
+        log.init_tables()?;
+        Ok(log)
+    }
+
+    fn init_tables(&self) -> SqlResult<()> {
+        self.conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS daily_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                code TEXT NOT NULL,
+                product_name TEXT NOT NULL,
+                servings REAL NOT NULL DEFAULT 1.0,
+                nutriments_json TEXT,
+                logged_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_daily_date ON daily_log(date);",
+        )
+    }
+
+    /// Log a product with a given number of servings for today.
+    pub fn log_product(&self, date: &str, product: &Product, servings: f64) -> SqlResult<()> {
+        let name = product.product_name.as_deref().unwrap_or("Unknown");
+        let nutriments_json = serde_json::to_string(&product.nutriments).ok();
+        self.conn.execute(
+            "INSERT INTO daily_log (date, code, product_name, servings, nutriments_json)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![date, product.code, name, servings, nutriments_json],
+        )?;
+        Ok(())
+    }
+
+    /// Get summary for a given date.
+    pub fn summary(&self, date: &str) -> SqlResult<DailySummary> {
+        let mut stmt = self.conn.prepare(
+            "SELECT code, product_name, servings, nutriments_json, logged_at
+             FROM daily_log WHERE date = ?1 ORDER BY logged_at",
+        )?;
+        let mut summary = DailySummary::default();
+
+        let rows = stmt.query_map(params![date], |row| {
+            let code: String = row.get(0)?;
+            let product_name: String = row.get(1)?;
+            let servings: f64 = row.get(2)?;
+            let nutriments_json: Option<String> = row.get(3)?;
+            let logged_at: String = row.get(4)?;
+            let nutriments: Option<Nutriments> =
+                nutriments_json.and_then(|s| serde_json::from_str(&s).ok());
+            Ok((
+                DailyEntry { code, product_name, servings, logged_at },
+                nutriments,
+                servings,
+            ))
+        })?;
+
+        for row in rows {
+            let (entry, nutriments, servings) = row?;
+            if let Some(n) = nutriments {
+                summary.total_kcal += n.energy_kcal_100g.unwrap_or(0.0) * servings;
+                summary.total_fat += n.fat_100g.unwrap_or(0.0) * servings;
+                summary.total_carbs += n.carbohydrates_100g.unwrap_or(0.0) * servings;
+                summary.total_protein += n.proteins_100g.unwrap_or(0.0) * servings;
+                summary.total_sugar += n.sugars_100g.unwrap_or(0.0) * servings;
+                summary.total_salt += n.salt_100g.unwrap_or(0.0) * servings;
+                summary.total_fiber += n.fiber_100g.unwrap_or(0.0) * servings;
+            }
+            summary.entries.push(entry);
+        }
+
+        Ok(summary)
+    }
+
+    /// Remove all entries for a date.
+    pub fn clear_date(&self, date: &str) -> SqlResult<usize> {
+        let affected = self.conn.execute(
+            "DELETE FROM daily_log WHERE date = ?1",
+            params![date],
+        )?;
+        Ok(affected)
+    }
+
+    /// Count entries for a date.
+    #[allow(dead_code)]
+    pub fn count(&self, date: &str) -> SqlResult<i64> {
+        self.conn.query_row(
+            "SELECT COUNT(*) FROM daily_log WHERE date = ?1",
+            params![date],
+            |row| row.get(0),
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::{Nutriments, Product};
+
+    fn sample_product(code: &str, name: &str, kcal: f64) -> Product {
+        Product {
+            code: code.to_string(),
+            product_name: Some(name.to_string()),
+            brands: Some("Brand".to_string()),
+            nutriscore_grade: Some("b".to_string()),
+            nova_group: Some(2),
+            additives_tags: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(kcal),
+                fat_100g: Some(5.0),
+                saturated_fat_100g: Some(1.0),
+                sugars_100g: Some(8.0),
+                salt_100g: Some(0.5),
+                proteins_100g: Some(3.0),
+                fiber_100g: Some(2.0),
+                carbohydrates_100g: Some(20.0),
+            }),
+            ingredients_text: None,
+            categories: None,
+            image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_log_and_count() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let p = sample_product("1", "Apple", 52.0);
+        log.log_product("2026-03-04", &p, 1.0).unwrap();
+        assert_eq!(log.count("2026-03-04").unwrap(), 1);
+        assert_eq!(log.count("2026-03-05").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_summary_totals() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let p = sample_product("1", "Oats", 100.0);
+        log.log_product("2026-03-04", &p, 2.0).unwrap();
+        let s = log.summary("2026-03-04").unwrap();
+        assert_eq!(s.entries.len(), 1);
+        assert!((s.total_kcal - 200.0).abs() < 0.01);
+        assert!((s.total_fat - 10.0).abs() < 0.01);
+        assert!((s.total_protein - 6.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_summary_multiple_products() {
+        let log = DailyLog::open_in_memory().unwrap();
+        log.log_product("2026-03-04", &sample_product("1", "A", 100.0), 1.0).unwrap();
+        log.log_product("2026-03-04", &sample_product("2", "B", 200.0), 1.5).unwrap();
+        let s = log.summary("2026-03-04").unwrap();
+        assert_eq!(s.entries.len(), 2);
+        assert!((s.total_kcal - (100.0 + 300.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_summary_empty_day() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let s = log.summary("2026-03-04").unwrap();
+        assert!(s.entries.is_empty());
+        assert_eq!(s.verdict(), "No entries logged today.");
+    }
+
+    #[test]
+    fn test_clear_date() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let p = sample_product("1", "A", 100.0);
+        log.log_product("2026-03-04", &p, 1.0).unwrap();
+        log.log_product("2026-03-04", &p, 1.0).unwrap();
+        log.log_product("2026-03-05", &p, 1.0).unwrap();
+        let removed = log.clear_date("2026-03-04").unwrap();
+        assert_eq!(removed, 2);
+        assert_eq!(log.count("2026-03-04").unwrap(), 0);
+        assert_eq!(log.count("2026-03-05").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_verdict_low_cal() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let p = sample_product("1", "Salad", 20.0);
+        log.log_product("2026-03-04", &p, 1.0).unwrap();
+        let s = log.summary("2026-03-04").unwrap();
+        assert!(s.verdict().contains("Low calorie"));
+    }
+
+    #[test]
+    fn test_verdict_high_cal() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let p = sample_product("1", "Pizza", 300.0);
+        log.log_product("2026-03-04", &p, 10.0).unwrap();
+        let s = log.summary("2026-03-04").unwrap();
+        assert!(s.verdict().contains("High calorie"));
+    }
+
+    #[test]
+    fn test_log_product_no_nutriments() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let p = Product {
+            code: "x".to_string(),
+            product_name: Some("Mystery".to_string()),
+            brands: None, nutriscore_grade: None, nova_group: None,
+            additives_tags: None, nutriments: None, ingredients_text: None,
+            categories: None, image_url: None,
+        };
+        log.log_product("2026-03-04", &p, 1.0).unwrap();
+        let s = log.summary("2026-03-04").unwrap();
+        assert_eq!(s.entries.len(), 1);
+        assert!(s.total_kcal.abs() < 0.01);
+    }
+}
