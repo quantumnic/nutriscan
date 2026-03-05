@@ -26,6 +26,7 @@ pub fn print_analysis(a: &Analysis) {
         if let Some(v) = n.energy_kcal_100g { println!("    Energy:    {:.0} kcal", v); }
         if let Some(v) = n.fat_100g { println!("    Fat:       {:.1} g", v); }
         if let Some(v) = n.saturated_fat_100g { println!("    Sat. Fat:  {:.1} g", v); }
+        if let Some(v) = n.carbohydrates_100g { println!("    Carbs:     {:.1} g", v); }
         if let Some(v) = n.sugars_100g { println!("    Sugars:    {:.1} g", v); }
         if let Some(v) = n.salt_100g { println!("    Salt:      {:.2} g", v); }
         if let Some(v) = n.proteins_100g { println!("    Proteins:  {:.1} g", v); }
