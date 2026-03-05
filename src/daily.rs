@@ -65,6 +65,23 @@ impl DailySummary {
             format!("{} {}", cal_msg, warnings.join(" "))
         }
     }
+
+    /// Caloric macro breakdown as percentages (fat%, carbs%, protein%).
+    /// Fat = 9 kcal/g, carbs & protein = 4 kcal/g each.
+    pub fn macro_percentages(&self) -> Option<(f64, f64, f64)> {
+        let fat_cal = self.total_fat * 9.0;
+        let carb_cal = self.total_carbs * 4.0;
+        let prot_cal = self.total_protein * 4.0;
+        let total = fat_cal + carb_cal + prot_cal;
+        if total < 1.0 {
+            return None;
+        }
+        Some((
+            fat_cal / total * 100.0,
+            carb_cal / total * 100.0,
+            prot_cal / total * 100.0,
+        ))
+    }
 }
 
 impl DailyLog {
@@ -487,7 +504,6 @@ mod fiber_warning_tests {
         let v = s.verdict();
         assert!(!v.contains("Fiber below"), "shouldn't warn on low intake, got: {v}");
     }
-}
 
     #[test]
     fn test_verdict_low_protein() {
@@ -510,3 +526,36 @@ mod fiber_warning_tests {
         let v = summary.verdict();
         assert!(v.contains("Protein below 50 g"), "got: {v}");
     }
+}
+
+#[cfg(test)]
+mod macro_pct_tests {
+    use super::*;
+
+    #[test]
+    fn test_macro_percentages_balanced() {
+        let s = DailySummary {
+            entries: vec![DailyEntry {
+                code: "1".into(), product_name: "Mix".into(),
+                servings: 1.0, logged_at: "12:00".into(),
+            }],
+            total_kcal: 2000.0,
+            total_fat: 67.0,   // 603 kcal
+            total_carbs: 250.0, // 1000 kcal
+            total_protein: 100.0, // 400 kcal  => total ~2003
+            total_sugar: 30.0, total_salt: 3.0,
+            total_fiber: 25.0, total_saturated_fat: 10.0,
+        };
+        let (f, c, p) = s.macro_percentages().unwrap();
+        assert!((f - 30.1).abs() < 1.0, "fat%: {f}");
+        assert!((c - 49.9).abs() < 1.0, "carb%: {c}");
+        assert!((p - 20.0).abs() < 1.0, "protein%: {p}");
+    }
+
+    #[test]
+    fn test_macro_percentages_empty() {
+        let s = DailySummary::default();
+        assert!(s.macro_percentages().is_none());
+    }
+}
+

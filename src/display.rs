@@ -199,6 +199,14 @@ pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary) {
     println!("    Fiber:       {:.1} g", summary.total_fiber);
     println!("    Sat. Fat:    {:.1} g", summary.total_saturated_fat);
 
+    if let Some((fat_pct, carb_pct, prot_pct)) = summary.macro_percentages() {
+        println!();
+        println!("{}", "  Macro split (by calories):".bold());
+        println!("    Fat:     {:.0}%", fat_pct);
+        println!("    Carbs:   {:.0}%", carb_pct);
+        println!("    Protein: {:.0}%", prot_pct);
+    }
+
     println!();
     let verdict = summary.verdict();
     let colored_verdict = if verdict.contains("Low") || verdict.contains("High") {
