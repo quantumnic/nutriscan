@@ -27,6 +27,8 @@ pub struct DailySummary {
     pub total_salt: f64,
     pub total_fiber: f64,
     pub total_saturated_fat: f64,
+    /// Highest-calorie entry: (product_name, kcal contributed)
+    pub top_kcal_entry: Option<(String, f64)>,
 }
 
 impl DailySummary {
@@ -161,6 +163,11 @@ impl DailyLog {
                 summary.total_salt += n.salt_100g.unwrap_or(0.0) * servings;
                 summary.total_fiber += n.fiber_100g.unwrap_or(0.0) * servings;
                 summary.total_saturated_fat += n.saturated_fat_100g.unwrap_or(0.0) * servings;
+                let entry_kcal = n.energy_kcal_100g.unwrap_or(0.0) * servings;
+                match &summary.top_kcal_entry {
+                    Some((_, best)) if entry_kcal <= *best => {}
+                    _ => { summary.top_kcal_entry = Some((entry.product_name.clone(), entry_kcal)); }
+                }
             }
             summary.entries.push(entry);
         }
@@ -390,7 +397,7 @@ mod verdict_warning_tests {
             total_sugar: 10.0,
             total_salt: 6.5,
             total_fiber: 3.0,
-            total_saturated_fat: 5.0,
+            total_saturated_fat: 5.0, top_kcal_entry: None,
         };
         let v = s.verdict();
         assert!(v.contains("Salt exceeds 5 g"), "got: {v}");
@@ -411,7 +418,7 @@ mod verdict_warning_tests {
             total_sugar: 65.0,
             total_salt: 1.0,
             total_fiber: 1.0,
-            total_saturated_fat: 2.0,
+            total_saturated_fat: 2.0, top_kcal_entry: None,
         };
         let v = s.verdict();
         assert!(v.contains("Sugar exceeds 50 g"), "got: {v}");
@@ -431,7 +438,7 @@ mod verdict_warning_tests {
             total_sugar: 80.0,
             total_salt: 7.0,
             total_fiber: 2.0,
-            total_saturated_fat: 25.0,
+            total_saturated_fat: 25.0, top_kcal_entry: None,
         };
         let v = s.verdict();
         assert!(v.contains("Salt exceeds"), "got: {v}");
@@ -459,7 +466,7 @@ mod fiber_warning_tests {
             total_sugar: 10.0,
             total_salt: 2.0,
             total_fiber: 8.0,
-            total_saturated_fat: 5.0,
+            total_saturated_fat: 5.0, top_kcal_entry: None,
         };
         let v = s.verdict();
         assert!(v.contains("Fiber below 25 g"), "got: {v}");
@@ -479,7 +486,7 @@ mod fiber_warning_tests {
             total_sugar: 10.0,
             total_salt: 2.0,
             total_fiber: 30.0,
-            total_saturated_fat: 3.0,
+            total_saturated_fat: 3.0, top_kcal_entry: None,
         };
         let v = s.verdict();
         assert!(!v.contains("Fiber below"), "got: {v}");
@@ -499,7 +506,7 @@ mod fiber_warning_tests {
             total_sugar: 3.0,
             total_salt: 0.5,
             total_fiber: 2.0,
-            total_saturated_fat: 1.0,
+            total_saturated_fat: 1.0, top_kcal_entry: None,
         };
         let v = s.verdict();
         assert!(!v.contains("Fiber below"), "shouldn't warn on low intake, got: {v}");
@@ -521,7 +528,7 @@ mod fiber_warning_tests {
             total_sugar: 20.0,
             total_salt: 2.0,
             total_fiber: 30.0,
-            total_saturated_fat: 10.0,
+            total_saturated_fat: 10.0, top_kcal_entry: None,
         };
         let v = summary.verdict();
         assert!(v.contains("Protein below 50 g"), "got: {v}");
@@ -544,7 +551,7 @@ mod macro_pct_tests {
             total_carbs: 250.0, // 1000 kcal
             total_protein: 100.0, // 400 kcal  => total ~2003
             total_sugar: 30.0, total_salt: 3.0,
-            total_fiber: 25.0, total_saturated_fat: 10.0,
+            total_fiber: 25.0, total_saturated_fat: 10.0, top_kcal_entry: None,
         };
         let (f, c, p) = s.macro_percentages().unwrap();
         assert!((f - 30.1).abs() < 1.0, "fat%: {f}");
@@ -615,5 +622,52 @@ mod undo_tests {
         let log = DailyLog::open_in_memory().unwrap();
         let removed = log.undo_last("2026-03-05").unwrap();
         assert_eq!(removed, None);
+    }
+}
+
+#[cfg(test)]
+mod top_contributor_tests {
+    use super::*;
+    use crate::api::{Nutriments, Product};
+
+    fn prod(name: &str, kcal: f64) -> Product {
+        Product {
+            code: "1".to_string(),
+            product_name: Some(name.to_string()),
+            brands: None, nutriscore_grade: None, nova_group: None,
+            additives_tags: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(kcal), fat_100g: Some(5.0),
+                saturated_fat_100g: Some(1.0), sugars_100g: Some(8.0),
+                salt_100g: Some(0.5), proteins_100g: Some(3.0),
+                fiber_100g: Some(2.0), carbohydrates_100g: Some(20.0),
+            }),
+            ingredients_text: None, categories: None, image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_top_contributor_single() {
+        let log = DailyLog::open_in_memory().unwrap();
+        log.log_product("2026-03-05", &prod("Apple", 52.0), 1.0).unwrap();
+        let s = log.summary("2026-03-05").unwrap();
+        assert_eq!(s.top_kcal_entry, Some(("Apple".to_string(), 52.0)));
+    }
+
+    #[test]
+    fn test_top_contributor_picks_highest() {
+        let log = DailyLog::open_in_memory().unwrap();
+        log.log_product("2026-03-05", &prod("Apple", 52.0), 1.0).unwrap();
+        log.log_product("2026-03-05", &prod("Pizza", 250.0), 2.0).unwrap();
+        log.log_product("2026-03-05", &prod("Salad", 20.0), 1.0).unwrap();
+        let s = log.summary("2026-03-05").unwrap();
+        assert_eq!(s.top_kcal_entry, Some(("Pizza".to_string(), 500.0)));
+    }
+
+    #[test]
+    fn test_top_contributor_empty() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let s = log.summary("2026-03-05").unwrap();
+        assert_eq!(s.top_kcal_entry, None);
     }
 }
