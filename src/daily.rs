@@ -56,7 +56,9 @@ impl DailySummary {
         if self.total_fiber < 25.0 && self.total_kcal > 500.0 {
             warnings.push("💡 Fiber below 25 g (WHO daily recommendation).");
         }
-
+        if self.total_protein < 50.0 && self.total_kcal > 500.0 {
+            warnings.push("💡 Protein below 50 g (recommended daily minimum).");
+        }
         if warnings.is_empty() {
             cal_msg.to_string()
         } else {
@@ -486,3 +488,25 @@ mod fiber_warning_tests {
         assert!(!v.contains("Fiber below"), "shouldn't warn on low intake, got: {v}");
     }
 }
+
+    #[test]
+    fn test_verdict_low_protein() {
+        let summary = DailySummary {
+            entries: vec![DailyEntry {
+                code: "1".into(),
+                product_name: "Test".into(),
+                servings: 1.0,
+                logged_at: "2025-01-01 12:00".into(),
+            }],
+            total_kcal: 1800.0,
+            total_fat: 60.0,
+            total_carbs: 200.0,
+            total_protein: 30.0,
+            total_sugar: 20.0,
+            total_salt: 2.0,
+            total_fiber: 30.0,
+            total_saturated_fat: 10.0,
+        };
+        let v = summary.verdict();
+        assert!(v.contains("Protein below 50 g"), "got: {v}");
+    }
