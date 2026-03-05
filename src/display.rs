@@ -267,5 +267,38 @@ pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily:
     println!("    Sugar:   {:.1} g", week_sugar / logged_days);
     println!("    Salt:    {:.2} g", week_salt / logged_days);
     println!("    Fiber:   {:.1} g", week_fiber / logged_days);
+
+    // Weekly macro percentages
+    let fat_cal = week_fat * 9.0;
+    let carb_cal = week_carbs * 4.0;
+    let prot_cal = week_protein * 4.0;
+    let total_cal = fat_cal + carb_cal + prot_cal;
+    if total_cal >= 1.0 {
+        println!();
+        println!("{}", "  Avg macro split (by calories):".bold());
+        println!("    Fat:     {:.0}%", fat_cal / total_cal * 100.0);
+        println!("    Carbs:   {:.0}%", carb_cal / total_cal * 100.0);
+        println!("    Protein: {:.0}%", prot_cal / total_cal * 100.0);
+    }
+
+    // Weekly warnings
+    let avg_salt = week_salt / logged_days;
+    let avg_sugar = week_sugar / logged_days;
+    let avg_sat_fat = week_sat_fat / logged_days;
+    let avg_fiber = week_fiber / logged_days;
+    let avg_protein = week_protein / logged_days;
+    let avg_kcal = week_kcal / logged_days;
+    let mut warnings: Vec<&str> = Vec::new();
+    if avg_salt > 5.0 { warnings.push("⚠ Avg salt exceeds 5 g/day"); }
+    if avg_sugar > 50.0 { warnings.push("⚠ Avg sugar exceeds 50 g/day"); }
+    if avg_sat_fat > 20.0 { warnings.push("⚠ Avg saturated fat exceeds 20 g/day"); }
+    if avg_fiber < 25.0 && avg_kcal > 500.0 { warnings.push("💡 Avg fiber below 25 g/day"); }
+    if avg_protein < 50.0 && avg_kcal > 500.0 { warnings.push("💡 Avg protein below 50 g/day"); }
+    if !warnings.is_empty() {
+        println!();
+        for w in &warnings {
+            println!("  {}", w);
+        }
+    }
     println!();
 }
