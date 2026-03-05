@@ -53,6 +53,9 @@ impl DailySummary {
         if self.total_saturated_fat > 20.0 {
             warnings.push("⚠ Saturated fat exceeds 20 g (recommended limit).");
         }
+        if self.total_fiber < 25.0 && self.total_kcal > 500.0 {
+            warnings.push("💡 Fiber below 25 g (WHO daily recommendation).");
+        }
 
         if warnings.is_empty() {
             cal_msg.to_string()
@@ -416,5 +419,70 @@ mod verdict_warning_tests {
         assert!(v.contains("Sugar exceeds"), "got: {v}");
         assert!(v.contains("Saturated fat exceeds"), "got: {v}");
         assert!(v.contains("High calorie"), "got: {v}");
+    }
+}
+
+#[cfg(test)]
+mod fiber_warning_tests {
+    use super::*;
+
+    #[test]
+    fn test_verdict_low_fiber_warning() {
+        let s = DailySummary {
+            entries: vec![DailyEntry {
+                code: "000".to_string(), product_name: "White Bread".to_string(),
+                logged_at: "12:00".to_string(), servings: 1.0,
+            }],
+            total_kcal: 1800.0,
+            total_fat: 10.0,
+            total_carbs: 60.0,
+            total_protein: 20.0,
+            total_sugar: 10.0,
+            total_salt: 2.0,
+            total_fiber: 8.0,
+            total_saturated_fat: 5.0,
+        };
+        let v = s.verdict();
+        assert!(v.contains("Fiber below 25 g"), "got: {v}");
+    }
+
+    #[test]
+    fn test_verdict_adequate_fiber_no_warning() {
+        let s = DailySummary {
+            entries: vec![DailyEntry {
+                code: "000".to_string(), product_name: "Lentils".to_string(),
+                logged_at: "12:00".to_string(), servings: 1.0,
+            }],
+            total_kcal: 1800.0,
+            total_fat: 10.0,
+            total_carbs: 60.0,
+            total_protein: 30.0,
+            total_sugar: 10.0,
+            total_salt: 2.0,
+            total_fiber: 30.0,
+            total_saturated_fat: 3.0,
+        };
+        let v = s.verdict();
+        assert!(!v.contains("Fiber below"), "got: {v}");
+    }
+
+    #[test]
+    fn test_verdict_low_fiber_skipped_if_low_intake() {
+        let s = DailySummary {
+            entries: vec![DailyEntry {
+                code: "000".to_string(), product_name: "Snack".to_string(),
+                logged_at: "12:00".to_string(), servings: 1.0,
+            }],
+            total_kcal: 200.0,
+            total_fat: 2.0,
+            total_carbs: 10.0,
+            total_protein: 5.0,
+            total_sugar: 3.0,
+            total_salt: 0.5,
+            total_fiber: 2.0,
+            total_saturated_fat: 1.0,
+        };
+        let v = s.verdict();
+        assert!(!v.contains("Fiber below"), "shouldn't warn on low intake, got: {v}");
     }
 }
