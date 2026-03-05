@@ -98,6 +98,13 @@ enum Commands {
         #[arg(short, long)]
         date: Option<String>,
     },
+
+    /// Undo the last logged entry for today (or a specific date)
+    Undo {
+        /// Date in YYYY-MM-DD format (defaults to today)
+        #[arg(short, long)]
+        date: Option<String>,
+    },
     /// Refresh stale cache entries from the API
     Refresh {
         /// Maximum age in days before considering stale
@@ -337,6 +344,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let date = date.unwrap_or_else(today);
             let removed = daily_log.clear_date(&date)?;
             println!("Cleared {} entries for {}.", removed, date);
+        }
+        Commands::Undo { date } => {
+            let date = date.unwrap_or_else(today);
+            match daily_log.undo_last(&date)? {
+                Some(name) => println!("↩ Removed last entry: {} ({})", name, date),
+                None => println!("No entries to undo for {}.", date),
+            }
         }
         Commands::Refresh { days, limit } => {
             let stale = db.stale_codes(days)?;

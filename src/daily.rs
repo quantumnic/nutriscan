@@ -559,3 +559,61 @@ mod macro_pct_tests {
     }
 }
 
+
+impl DailyLog {
+    /// Remove the most recently logged entry for a date. Returns the product name if removed.
+    pub fn undo_last(&self, date: &str) -> SqlResult<Option<String>> {
+        let row: Option<(i64, String)> = self.conn.query_row(
+            "SELECT id, product_name FROM daily_log WHERE date = ?1 ORDER BY id DESC LIMIT 1",
+            params![date],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).ok();
+        match row {
+            Some((id, name)) => {
+                self.conn.execute("DELETE FROM daily_log WHERE id = ?1", params![id])?;
+                Ok(Some(name))
+            }
+            None => Ok(None),
+        }
+    }
+}
+
+#[cfg(test)]
+mod undo_tests {
+    use super::*;
+    use crate::api::{Nutriments, Product};
+
+    fn sample(name: &str, kcal: f64) -> Product {
+        Product {
+            code: "1".to_string(),
+            product_name: Some(name.to_string()),
+            brands: Some("B".to_string()),
+            nutriscore_grade: None, nova_group: None,
+            additives_tags: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(kcal), fat_100g: Some(5.0),
+                saturated_fat_100g: Some(1.0), sugars_100g: Some(8.0),
+                salt_100g: Some(0.5), proteins_100g: Some(3.0),
+                fiber_100g: Some(2.0), carbohydrates_100g: Some(20.0),
+            }),
+            ingredients_text: None, categories: None, image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_undo_last_removes_most_recent() {
+        let log = DailyLog::open_in_memory().unwrap();
+        log.log_product("2026-03-05", &sample("Apple", 52.0), 1.0).unwrap();
+        log.log_product("2026-03-05", &sample("Pizza", 250.0), 2.0).unwrap();
+        let removed = log.undo_last("2026-03-05").unwrap();
+        assert_eq!(removed, Some("Pizza".to_string()));
+        assert_eq!(log.count("2026-03-05").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_undo_last_empty_day() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let removed = log.undo_last("2026-03-05").unwrap();
+        assert_eq!(removed, None);
+    }
+}
