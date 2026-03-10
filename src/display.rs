@@ -1,4 +1,4 @@
-use crate::analyzer::{Analysis, AdditiveWarning, MacroBalance, NutriRating, NovaGroup};
+use crate::analyzer::{Analysis, AdditiveWarning, EnergyDensity, MacroBalance, NutriRating, NovaGroup};
 use crate::api::Product;
 use colored::*;
 
@@ -69,6 +69,10 @@ pub fn print_analysis(a: &Analysis) {
         };
         println!("  Health Score: {} {}", emoji, color_label);
     }
+
+    if let Some(ref ed) = a.energy_density {
+        println!("  Energy density: {} {}", ed.emoji(), colorize_energy_density(ed));
+    }
     println!();
 }
 
@@ -126,6 +130,15 @@ fn colorize_nutri(r: &NutriRating) -> ColoredString {
         NutriRating::Poor => r.label().red(),
         NutriRating::Bad => r.label().red().bold(),
         NutriRating::Unknown => r.label().dimmed(),
+    }
+}
+
+fn colorize_energy_density(ed: &EnergyDensity) -> ColoredString {
+    match ed {
+        EnergyDensity::VeryLow => ed.label().green(),
+        EnergyDensity::Low => ed.label().green(),
+        EnergyDensity::Medium => ed.label().yellow(),
+        EnergyDensity::High => ed.label().red(),
     }
 }
 

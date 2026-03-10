@@ -240,6 +240,7 @@ pub struct Analysis {
     pub allergens: Vec<String>,
     pub health_score: Option<u32>,
     pub macro_balance: MacroBalance,
+    pub energy_density: Option<EnergyDensity>,
     pub product: Product,
 }
 
@@ -275,6 +276,7 @@ pub fn analyze(product: &Product) -> Analysis {
     let score = health_score(product);
 
     let macro_balance = assess_macro_balance(product);
+    let energy_density = classify_energy_density(product);
 
     Analysis {
         product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
@@ -285,6 +287,7 @@ pub fn analyze(product: &Product) -> Analysis {
         allergens,
         health_score: score,
         macro_balance,
+        energy_density,
         product: product.clone(),
     }
 }
@@ -324,6 +327,51 @@ pub enum MacroBalance {
     Balanced,
     HighIn(String),
     Unknown,
+}
+
+
+/// Energy density classification based on kcal per 100g.
+#[derive(Debug, Clone, PartialEq)]
+pub enum EnergyDensity {
+    /// < 60 kcal/100g (most fruits, vegetables, broth)
+    VeryLow,
+    /// 60–150 kcal/100g (cooked grains, lean meat)
+    Low,
+    /// 150–400 kcal/100g (bread, cheese, meat)
+    Medium,
+    /// > 400 kcal/100g (nuts, oils, chocolate)
+    High,
+}
+
+impl EnergyDensity {
+    pub fn label(&self) -> &'static str {
+        match self {
+            EnergyDensity::VeryLow => "Very low (<60 kcal/100g)",
+            EnergyDensity::Low => "Low (60–150 kcal/100g)",
+            EnergyDensity::Medium => "Medium (150–400 kcal/100g)",
+            EnergyDensity::High => "High (>400 kcal/100g)",
+        }
+    }
+
+    pub fn emoji(&self) -> &'static str {
+        match self {
+            EnergyDensity::VeryLow => "🟢",
+            EnergyDensity::Low => "🟡",
+            EnergyDensity::Medium => "🟠",
+            EnergyDensity::High => "🔴",
+        }
+    }
+}
+
+/// Classify energy density from nutriments.
+pub fn classify_energy_density(product: &Product) -> Option<EnergyDensity> {
+    let kcal = product.nutriments.as_ref()?.energy_kcal_100g?;
+    Some(match kcal {
+        x if x < 60.0 => EnergyDensity::VeryLow,
+        x if x < 150.0 => EnergyDensity::Low,
+        x if x < 400.0 => EnergyDensity::Medium,
+        _ => EnergyDensity::High,
+    })
 }
 
 /// Assess macro-nutrient balance from nutriments.
@@ -571,5 +619,60 @@ mod tests {
         ]);
         let a = analyze(&p);
         assert_eq!(a.warnings.len(), 5);
+    }
+
+
+    #[test]
+    fn test_energy_density_very_low() {
+        let mut p = make_product(Some("a"), Some(1), vec![]);
+        p.nutriments.as_mut().unwrap().energy_kcal_100g = Some(30.0);
+        assert_eq!(classify_energy_density(&p), Some(EnergyDensity::VeryLow));
+    }
+
+    #[test]
+    fn test_energy_density_low() {
+        let mut p = make_product(Some("b"), Some(2), vec![]);
+        p.nutriments.as_mut().unwrap().energy_kcal_100g = Some(100.0);
+        assert_eq!(classify_energy_density(&p), Some(EnergyDensity::Low));
+    }
+
+    #[test]
+    fn test_energy_density_medium() {
+        let p = make_product(Some("c"), Some(3), vec![]);  // 100 kcal default
+        // default is 100 kcal -> Low, so set to 250
+        let mut p2 = p;
+        p2.nutriments.as_mut().unwrap().energy_kcal_100g = Some(250.0);
+        assert_eq!(classify_energy_density(&p2), Some(EnergyDensity::Medium));
+    }
+
+    #[test]
+    fn test_energy_density_high() {
+        let mut p = make_product(Some("d"), Some(4), vec![]);
+        p.nutriments.as_mut().unwrap().energy_kcal_100g = Some(550.0);
+        assert_eq!(classify_energy_density(&p), Some(EnergyDensity::High));
+    }
+
+    #[test]
+    fn test_energy_density_none_without_nutriments() {
+        let p = Product {
+            code: "1".into(), product_name: None, brands: None,
+            nutriscore_grade: None, nova_group: None, additives_tags: None,
+            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+        };
+        assert_eq!(classify_energy_density(&p), None);
+    }
+
+    #[test]
+    fn test_energy_density_boundary_60() {
+        let mut p = make_product(Some("a"), Some(1), vec![]);
+        p.nutriments.as_mut().unwrap().energy_kcal_100g = Some(60.0);
+        assert_eq!(classify_energy_density(&p), Some(EnergyDensity::Low));
+    }
+
+    #[test]
+    fn test_analysis_includes_energy_density() {
+        let p = make_product(Some("b"), Some(2), vec![]);
+        let a = analyze(&p);
+        assert!(a.energy_density.is_some());
     }
 }
