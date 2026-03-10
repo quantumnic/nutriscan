@@ -671,3 +671,132 @@ mod top_contributor_tests {
         assert_eq!(s.top_kcal_entry, None);
     }
 }
+
+impl DailyLog {
+    /// Count consecutive days with logged entries ending on `date` (inclusive).
+    /// Returns 0 if no entries exist on the given date.
+    pub fn streak(&self, date: &str) -> SqlResult<u32> {
+        // First check if the given date has entries
+        let has_entries: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM daily_log WHERE date = ?1)",
+            rusqlite::params![date],
+            |row| row.get(0),
+        )?;
+        if !has_entries {
+            return Ok(0);
+        }
+
+        // Collect all distinct logged dates up to and including `date`, descending
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT date FROM daily_log WHERE date <= ?1 ORDER BY date DESC",
+        )?;
+        let dates: Vec<String> = stmt
+            .query_map(rusqlite::params![date], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if dates.is_empty() {
+            return Ok(0);
+        }
+
+        // Walk backwards checking consecutive days
+        let mut streak = 1u32;
+        for i in 1..dates.len() {
+            let prev = &dates[i - 1];
+            let curr = &dates[i];
+            // Parse dates and check they're exactly 1 day apart
+            if is_previous_day(curr, prev) {
+                streak += 1;
+            } else {
+                break;
+            }
+        }
+        Ok(streak)
+    }
+}
+
+/// Check if `earlier` is exactly one day before `later` (both YYYY-MM-DD).
+fn is_previous_day(earlier: &str, later: &str) -> bool {
+    let parse = |s: &str| -> Option<(u64, u64, u64)> {
+        let parts: Vec<u64> = s.split('-').filter_map(|p| p.parse().ok()).collect();
+        if parts.len() == 3 { Some((parts[0], parts[1], parts[2])) } else { None }
+    };
+    let Some((ey, em, ed)) = parse(earlier) else { return false };
+    let Some((ly, lm, ld)) = parse(later) else { return false };
+    let e_days = crate::ymd_to_days(ey, em, ed);
+    let l_days = crate::ymd_to_days(ly, lm, ld);
+    l_days == e_days + 1
+}
+
+#[cfg(test)]
+mod streak_tests {
+    use super::*;
+    use crate::api::{Nutriments, Product};
+
+    fn prod(name: &str) -> Product {
+        Product {
+            code: "1".to_string(),
+            product_name: Some(name.to_string()),
+            brands: None, nutriscore_grade: None, nova_group: None,
+            additives_tags: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(100.0), fat_100g: Some(5.0),
+                saturated_fat_100g: Some(1.0), sugars_100g: Some(8.0),
+                salt_100g: Some(0.5), proteins_100g: Some(3.0),
+                fiber_100g: Some(2.0), carbohydrates_100g: Some(20.0),
+            }),
+            ingredients_text: None, categories: None, image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_streak_no_entries() {
+        let log = DailyLog::open_in_memory().unwrap();
+        assert_eq!(log.streak("2026-03-10").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_streak_single_day() {
+        let log = DailyLog::open_in_memory().unwrap();
+        log.log_product("2026-03-10", &prod("Apple"), 1.0).unwrap();
+        assert_eq!(log.streak("2026-03-10").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_streak_consecutive_days() {
+        let log = DailyLog::open_in_memory().unwrap();
+        log.log_product("2026-03-08", &prod("A"), 1.0).unwrap();
+        log.log_product("2026-03-09", &prod("B"), 1.0).unwrap();
+        log.log_product("2026-03-10", &prod("C"), 1.0).unwrap();
+        assert_eq!(log.streak("2026-03-10").unwrap(), 3);
+    }
+
+    #[test]
+    fn test_streak_broken_by_gap() {
+        let log = DailyLog::open_in_memory().unwrap();
+        log.log_product("2026-03-07", &prod("A"), 1.0).unwrap();
+        // skip 2026-03-08
+        log.log_product("2026-03-09", &prod("B"), 1.0).unwrap();
+        log.log_product("2026-03-10", &prod("C"), 1.0).unwrap();
+        assert_eq!(log.streak("2026-03-10").unwrap(), 2);
+    }
+
+    #[test]
+    fn test_streak_cross_month() {
+        let log = DailyLog::open_in_memory().unwrap();
+        log.log_product("2026-02-27", &prod("A"), 1.0).unwrap();
+        log.log_product("2026-02-28", &prod("B"), 1.0).unwrap();
+        log.log_product("2026-03-01", &prod("C"), 1.0).unwrap();
+        assert_eq!(log.streak("2026-03-01").unwrap(), 3);
+    }
+
+    #[test]
+    fn test_streak_queried_midway() {
+        let log = DailyLog::open_in_memory().unwrap();
+        log.log_product("2026-03-08", &prod("A"), 1.0).unwrap();
+        log.log_product("2026-03-09", &prod("B"), 1.0).unwrap();
+        log.log_product("2026-03-10", &prod("C"), 1.0).unwrap();
+        // Query streak as of 03-09
+        assert_eq!(log.streak("2026-03-09").unwrap(), 2);
+    }
+}

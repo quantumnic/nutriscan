@@ -337,7 +337,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 let date = date.unwrap_or_else(today);
                 let summary = daily_log.summary(&date)?;
-                display::print_daily_summary(&date, &summary);
+                let streak = daily_log.streak(&date)?;
+                display::print_daily_summary(&date, &summary, streak);
             }
         }
         Commands::ClearDay { date } => {

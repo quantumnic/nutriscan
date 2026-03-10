@@ -180,7 +180,7 @@ mod tests {
     }
 }
 
-pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary) {
+pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary, streak: u32) {
     println!();
     println!("{}", format!("═══ Daily Intake: {} ═══", date).bold().cyan());
 
@@ -234,6 +234,10 @@ pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary) {
         verdict.green()
     };
     println!("  💡 {}", colored_verdict);
+
+    if streak > 1 {
+        println!("  🔥 Logging streak: {} consecutive days!", streak);
+    }
     println!();
 }
 
