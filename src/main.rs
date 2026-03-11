@@ -333,7 +333,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let end = date.clone().unwrap_or_else(today);
                 let start = date_minus_days(&end, 6);
                 let range = daily_log.date_range_summary(&start, &end)?;
-                display::print_weekly_summary(&start, &end, &range);
+                let streak = daily_log.streak(&end)?;
+                display::print_weekly_summary(&start, &end, &range, streak);
             } else {
                 let date = date.unwrap_or_else(today);
                 let summary = daily_log.summary(&date)?;

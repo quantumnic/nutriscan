@@ -235,13 +235,14 @@ pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary, str
     };
     println!("  💡 {}", colored_verdict);
 
-    if streak > 1 {
-        println!("  🔥 Logging streak: {} consecutive days!", streak);
+    if streak > 0 {
+        let streak_msg = streak_motivation(streak);
+        println!("  🔥 Logging streak: {} consecutive day{}! {}", streak, if streak == 1 { "" } else { "s" }, streak_msg);
     }
     println!();
 }
 
-pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily::DailySummary)]) {
+pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily::DailySummary)], streak: u32) {
     println!();
     println!("{}", format!("═══ Weekly Summary: {} → {} ═══", from, to).bold().cyan());
 
@@ -323,5 +324,40 @@ pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily:
             println!("  {}", w);
         }
     }
+
+    if streak > 0 {
+        println!();
+        let streak_msg = streak_motivation(streak);
+        println!("  🔥 Logging streak: {} consecutive day{}! {}", streak, if streak == 1 { "" } else { "s" }, streak_msg);
+    }
     println!();
+}
+
+/// Motivational message based on streak length.
+fn streak_motivation(streak: u32) -> &'static str {
+    match streak {
+        0 => "Start logging to build a streak!",
+        1 => "First step — keep it going!",
+        2..=4 => "Nice momentum!",
+        5..=9 => "Solid habit forming!",
+        10..=29 => "Impressive dedication! 💪",
+        30..=99 => "A whole month+ streak — amazing!",
+        _ => "Legendary consistency! 🏆",
+    }
+}
+
+#[cfg(test)]
+mod streak_motivation_tests {
+    use super::*;
+
+    #[test]
+    fn test_streak_motivation_messages() {
+        assert!(streak_motivation(0).contains("Start"));
+        assert!(streak_motivation(1).contains("First"));
+        assert!(streak_motivation(3).contains("momentum"));
+        assert!(streak_motivation(7).contains("habit"));
+        assert!(streak_motivation(15).contains("dedication"));
+        assert!(streak_motivation(45).contains("month"));
+        assert!(streak_motivation(100).contains("Legendary"));
+    }
 }
