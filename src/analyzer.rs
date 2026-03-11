@@ -292,29 +292,59 @@ pub fn analyze(product: &Product) -> Analysis {
     }
 }
 
+/// Winner hint for a comparison row.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CompareWinner {
+    /// Product A is better (or equal).
+    A,
+    /// Product B is better.
+    B,
+    /// Tied or not enough data.
+    Tie,
+}
+
 #[allow(clippy::type_complexity)]
-pub fn compare_products(a: &Product, b: &Product) -> Vec<(String, String, String)> {
+pub fn compare_products(a: &Product, b: &Product) -> Vec<(String, String, String, CompareWinner)> {
     let mut diffs = Vec::new();
     let na = a.nutriments.as_ref();
     let nb = b.nutriments.as_ref();
 
-    let fields: Vec<(&str, Box<dyn Fn(&crate::api::Nutriments) -> Option<f64>>)> = vec![
-        ("Energy (kcal)", Box::new(|n: &crate::api::Nutriments| n.energy_kcal_100g)),
-        ("Fat (g)", Box::new(|n| n.fat_100g)),
-        ("Sugars (g)", Box::new(|n| n.sugars_100g)),
-        ("Salt (g)", Box::new(|n| n.salt_100g)),
-        ("Proteins (g)", Box::new(|n| n.proteins_100g)),
-        ("Fiber (g)", Box::new(|n| n.fiber_100g)),
-        ("Sat. Fat (g)", Box::new(|n| n.saturated_fat_100g)),
+    // (label, getter, higher_is_better)
+    let fields: Vec<(&str, Box<dyn Fn(&crate::api::Nutriments) -> Option<f64>>, bool)> = vec![
+        ("Energy (kcal)", Box::new(|n: &crate::api::Nutriments| n.energy_kcal_100g), false),
+        ("Fat (g)", Box::new(|n| n.fat_100g), false),
+        ("Sugars (g)", Box::new(|n| n.sugars_100g), false),
+        ("Salt (g)", Box::new(|n| n.salt_100g), false),
+        ("Proteins (g)", Box::new(|n| n.proteins_100g), true),
+        ("Fiber (g)", Box::new(|n| n.fiber_100g), true),
+        ("Sat. Fat (g)", Box::new(|n| n.saturated_fat_100g), false),
     ];
 
-    for (label, getter) in &fields {
+    for (label, getter, higher_is_better) in &fields {
         let va = na.and_then(getter);
         let vb = nb.and_then(getter);
+        let winner = match (va, vb) {
+            (Some(x), Some(y)) => {
+                let (better_a, better_b) = if *higher_is_better {
+                    (x > y, y > x)
+                } else {
+                    (x < y, y < x)
+                };
+                if better_a {
+                    CompareWinner::A
+                } else if better_b {
+                    CompareWinner::B
+                } else {
+                    CompareWinner::Tie
+                }
+            }
+            _ => CompareWinner::Tie,
+        };
         diffs.push((
             label.to_string(),
             va.map(|v| format!("{:.1}", v)).unwrap_or_else(|| "—".into()),
             vb.map(|v| format!("{:.1}", v)).unwrap_or_else(|| "—".into()),
+            winner,
         ));
     }
 
@@ -521,9 +551,11 @@ mod tests {
         b.nutriments.as_mut().unwrap().sugars_100g = Some(30.0);
         let diffs = compare_products(&a, &b);
         assert!(diffs.len() >= 6);
-        let sugar_row = diffs.iter().find(|(l, _, _)| l == "Sugars (g)").unwrap();
+        let sugar_row = diffs.iter().find(|(l, _, _, _)| l == "Sugars (g)").unwrap();
         assert_eq!(sugar_row.1, "10.0");
         assert_eq!(sugar_row.2, "30.0");
+        // Lower sugar is better, so product A should win
+        assert_eq!(sugar_row.3, CompareWinner::A);
     }
 
     #[test]
@@ -609,7 +641,10 @@ mod tests {
             nutriments: None, ingredients_text: None, categories: None, image_url: None,
         };
         let diffs = compare_products(&a, &b);
-        for (_, _, vb) in &diffs { assert_eq!(vb, "\u{2014}"); }
+        for (_, _, vb, w) in &diffs {
+            assert_eq!(vb, "\u{2014}");
+            assert_eq!(*w, CompareWinner::Tie);
+        }
     }
 
     #[test]
@@ -619,6 +654,38 @@ mod tests {
         ]);
         let a = analyze(&p);
         assert_eq!(a.warnings.len(), 5);
+    }
+
+    #[test]
+    fn test_winner_lower_is_better() {
+        let mut a = make_product(Some("a"), Some(1), vec![]);
+        let mut b = make_product(Some("a"), Some(1), vec![]);
+        a.nutriments.as_mut().unwrap().fat_100g = Some(5.0);
+        b.nutriments.as_mut().unwrap().fat_100g = Some(15.0);
+        let diffs = compare_products(&a, &b);
+        let fat_row = diffs.iter().find(|(l, _, _, _)| l == "Fat (g)").unwrap();
+        assert_eq!(fat_row.3, CompareWinner::A);
+    }
+
+    #[test]
+    fn test_winner_higher_is_better() {
+        let mut a = make_product(Some("a"), Some(1), vec![]);
+        let mut b = make_product(Some("a"), Some(1), vec![]);
+        a.nutriments.as_mut().unwrap().proteins_100g = Some(5.0);
+        b.nutriments.as_mut().unwrap().proteins_100g = Some(25.0);
+        let diffs = compare_products(&a, &b);
+        let prot_row = diffs.iter().find(|(l, _, _, _)| l == "Proteins (g)").unwrap();
+        assert_eq!(prot_row.3, CompareWinner::B);
+    }
+
+    #[test]
+    fn test_winner_tie() {
+        let a = make_product(Some("a"), Some(1), vec![]);
+        let b = make_product(Some("a"), Some(1), vec![]);
+        let diffs = compare_products(&a, &b);
+        for (_, _, _, w) in &diffs {
+            assert_eq!(*w, CompareWinner::Tie);
+        }
     }
 
 

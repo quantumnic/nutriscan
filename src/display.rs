@@ -92,32 +92,54 @@ pub fn print_warnings(warnings: &[AdditiveWarning], product_name: &str) {
     }
 }
 
-pub fn print_comparison(a: &Product, b: &Product, diffs: &[(String, String, String)]) {
+pub fn print_comparison(a: &Product, b: &Product, diffs: &[(String, String, String, crate::analyzer::CompareWinner)]) {
+    use crate::analyzer::CompareWinner;
+
     let name_a = a.product_name.as_deref().unwrap_or("Product A");
     let name_b = b.product_name.as_deref().unwrap_or("Product B");
 
     println!();
     println!("{}", "═══ Product Comparison ═══".bold().cyan());
     println!(
-        "  {:20} {:>12} {:>12}",
+        "  {:20} {:>12}    {:>12}",
         "Metric".bold(),
         name_a.bold(),
         name_b.bold()
     );
-    println!("  {}", "─".repeat(46));
+    println!("  {}", "─".repeat(52));
 
     // Nutri-Score row
     let ga = a.nutriscore_grade.as_deref().unwrap_or("?").to_uppercase();
     let gb = b.nutriscore_grade.as_deref().unwrap_or("?").to_uppercase();
-    println!("  {:20} {:>12} {:>12}", "Nutri-Score", ga, gb);
+    println!("  {:20} {:>12}    {:>12}", "Nutri-Score", ga, gb);
 
     // NOVA row
     let na = a.nova_group.map(|v| v.to_string()).unwrap_or_else(|| "?".into());
     let nb = b.nova_group.map(|v| v.to_string()).unwrap_or_else(|| "?".into());
-    println!("  {:20} {:>12} {:>12}", "NOVA Group", na, nb);
+    println!("  {:20} {:>12}    {:>12}", "NOVA Group", na, nb);
 
-    for (label, va, vb) in diffs {
-        println!("  {:20} {:>12} {:>12}", label, va, vb);
+    for (label, va, vb, winner) in diffs {
+        let indicator = match winner {
+            CompareWinner::A => "◀ ",
+            CompareWinner::B => " ▶",
+            CompareWinner::Tie => "  ",
+        };
+        println!("  {:20} {:>12} {} {:>12}", label, va, indicator, vb);
+    }
+
+    // Tally up wins
+    let a_wins = diffs.iter().filter(|(_, _, _, w)| *w == CompareWinner::A).count();
+    let b_wins = diffs.iter().filter(|(_, _, _, w)| *w == CompareWinner::B).count();
+    if a_wins > 0 || b_wins > 0 {
+        println!();
+        let verdict = if a_wins > b_wins {
+            format!("  ✅ {} wins on {}/{} metrics", name_a, a_wins, diffs.len())
+        } else if b_wins > a_wins {
+            format!("  ✅ {} wins on {}/{} metrics", name_b, b_wins, diffs.len())
+        } else {
+            "  🤝 It's a tie overall!".to_string()
+        };
+        println!("{}", verdict.bold());
     }
     println!();
 }
