@@ -243,6 +243,7 @@ pub struct Analysis {
     pub energy_density: Option<EnergyDensity>,
     pub protein_density: Option<ProteinDensity>,
     pub fiber_density: Option<FiberDensity>,
+    pub sugar_density: Option<SugarDensity>,
     pub product: Product,
 }
 
@@ -281,6 +282,7 @@ pub fn analyze(product: &Product) -> Analysis {
     let energy_density = classify_energy_density(product);
     let protein_density = classify_protein_density(product);
     let fiber_density = classify_fiber_density(product);
+    let sugar_density = classify_sugar_density(product);
 
     Analysis {
         product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
@@ -294,6 +296,7 @@ pub fn analyze(product: &Product) -> Analysis {
         energy_density,
         protein_density,
         fiber_density,
+        sugar_density,
         product: product.clone(),
     }
 }
@@ -965,4 +968,134 @@ mod tests {
     }
 
 
+}
+
+/// Sugar density classification based on grams of sugar per 100 kcal.
+/// Lower values indicate healthier choices regarding added/free sugars.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SugarDensity {
+    /// < 5 g sugar per 100 kcal
+    Low,
+    /// 5-10 g sugar per 100 kcal
+    Moderate,
+    /// 10-20 g sugar per 100 kcal
+    High,
+    /// > 20 g sugar per 100 kcal (e.g. candy, soft drinks, jams)
+    VeryHigh,
+}
+
+impl SugarDensity {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Low => "Low",
+            Self::Moderate => "Moderate",
+            Self::High => "High",
+            Self::VeryHigh => "Very high",
+        }
+    }
+
+    pub fn emoji(&self) -> &'static str {
+        match self {
+            Self::Low => "🟢",
+            Self::Moderate => "🟡",
+            Self::High => "🟠",
+            Self::VeryHigh => "🔴",
+        }
+    }
+}
+
+/// Calculate sugar density: grams of sugar per 100 kcal.
+/// Returns None if energy or sugar data is missing or energy is near zero.
+pub fn classify_sugar_density(product: &Product) -> Option<SugarDensity> {
+    let n = product.nutriments.as_ref()?;
+    let kcal = n.energy_kcal_100g?;
+    let sugar = n.sugars_100g?;
+    if kcal < 1.0 {
+        return None;
+    }
+    let per_100 = sugar / kcal * 100.0;
+    Some(match per_100 {
+        x if x < 5.0 => SugarDensity::Low,
+        x if x < 10.0 => SugarDensity::Moderate,
+        x if x < 20.0 => SugarDensity::High,
+        _ => SugarDensity::VeryHigh,
+    })
+}
+
+#[cfg(test)]
+mod sugar_density_tests {
+    use super::*;
+    use crate::api::{Nutriments, Product};
+
+    fn make_product_sugar(kcal: f64, sugar: f64) -> Product {
+        Product {
+            code: "1".into(),
+            product_name: Some("Test".into()),
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(kcal),
+                sugars_100g: Some(sugar),
+                ..Default::default()
+            }),
+            ingredients_text: None,
+            categories: None,
+            image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_classify_sugar_density_low() {
+        // 3g sugar per 100kcal = 3.0 per 100 => Low
+        let p = make_product_sugar(100.0, 3.0);
+        assert_eq!(classify_sugar_density(&p), Some(SugarDensity::Low));
+    }
+
+    #[test]
+    fn test_classify_sugar_density_moderate() {
+        // 7g sugar per 100kcal => Moderate
+        let p = make_product_sugar(100.0, 7.0);
+        assert_eq!(classify_sugar_density(&p), Some(SugarDensity::Moderate));
+    }
+
+    #[test]
+    fn test_classify_sugar_density_high() {
+        // 15g sugar per 100kcal => High
+        let p = make_product_sugar(100.0, 15.0);
+        assert_eq!(classify_sugar_density(&p), Some(SugarDensity::High));
+    }
+
+    #[test]
+    fn test_classify_sugar_density_very_high() {
+        // 25g sugar per 100kcal => VeryHigh
+        let p = make_product_sugar(100.0, 25.0);
+        assert_eq!(classify_sugar_density(&p), Some(SugarDensity::VeryHigh));
+    }
+
+    #[test]
+    fn test_classify_sugar_density_none_without_data() {
+        let p = Product {
+            code: "1".into(), product_name: None, brands: None,
+            nutriscore_grade: None, nova_group: None, additives_tags: None,
+            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+        };
+        assert_eq!(classify_sugar_density(&p), None);
+    }
+
+    #[test]
+    fn test_classify_sugar_density_zero_kcal() {
+        let p = make_product_sugar(0.0, 5.0);
+        assert_eq!(classify_sugar_density(&p), None);
+    }
+
+    #[test]
+    fn test_analysis_includes_sugar_density() {
+        let mut p = make_product_sugar(100.0, 10.0);
+        p.nutriscore_grade = Some("b".into());
+        p.nova_group = Some(2);
+        let a = analyze(&p);
+        assert!(a.sugar_density.is_some());
+    }
 }

@@ -1,4 +1,4 @@
-use crate::analyzer::{Analysis, AdditiveWarning, EnergyDensity, FiberDensity, MacroBalance, NutriRating, NovaGroup, ProteinDensity};
+use crate::analyzer::{Analysis, AdditiveWarning, EnergyDensity, FiberDensity, MacroBalance, NutriRating, NovaGroup, ProteinDensity, SugarDensity};
 use crate::api::Product;
 use colored::*;
 
@@ -80,6 +80,10 @@ pub fn print_analysis(a: &Analysis) {
 
     if let Some(ref fd) = a.fiber_density {
         println!("  Fiber density: {} {}", fd.emoji(), colorize_fiber_density(fd));
+    }
+
+    if let Some(ref sd) = a.sugar_density {
+        println!("  Sugar density: {} {}", sd.emoji(), colorize_sugar_density(sd));
     }
     println!();
 }
@@ -410,5 +414,15 @@ mod streak_motivation_tests {
         assert!(streak_motivation(15).contains("dedication"));
         assert!(streak_motivation(45).contains("month"));
         assert!(streak_motivation(100).contains("Legendary"));
+    }
+}
+
+fn colorize_sugar_density(sd: &SugarDensity) -> colored::ColoredString {
+    use colored::Colorize;
+    match sd {
+        SugarDensity::Low => sd.label().green(),
+        SugarDensity::Moderate => sd.label().yellow(),
+        SugarDensity::High => sd.label().red(),
+        SugarDensity::VeryHigh => sd.label().red().bold(),
     }
 }
