@@ -244,6 +244,7 @@ pub struct Analysis {
     pub protein_density: Option<ProteinDensity>,
     pub fiber_density: Option<FiberDensity>,
     pub sugar_density: Option<SugarDensity>,
+    pub sat_fat_density: Option<SatFatDensity>,
     pub product: Product,
 }
 
@@ -283,6 +284,7 @@ pub fn analyze(product: &Product) -> Analysis {
     let protein_density = classify_protein_density(product);
     let fiber_density = classify_fiber_density(product);
     let sugar_density = classify_sugar_density(product);
+    let sat_fat_density = classify_sat_fat_density(product);
 
     Analysis {
         product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
@@ -297,6 +299,7 @@ pub fn analyze(product: &Product) -> Analysis {
         protein_density,
         fiber_density,
         sugar_density,
+        sat_fat_density,
         product: product.clone(),
     }
 }
@@ -1097,5 +1100,135 @@ mod sugar_density_tests {
         p.nova_group = Some(2);
         let a = analyze(&p);
         assert!(a.sugar_density.is_some());
+    }
+}
+
+/// Saturated fat density classification based on grams of saturated fat per 100 kcal.
+/// Lower values indicate heart-healthier choices.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SatFatDensity {
+    /// < 1 g sat fat per 100 kcal
+    Low,
+    /// 1-3 g sat fat per 100 kcal
+    Moderate,
+    /// 3-6 g sat fat per 100 kcal
+    High,
+    /// > 6 g sat fat per 100 kcal (e.g. butter, cream, coconut oil)
+    VeryHigh,
+}
+
+impl SatFatDensity {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Low => "Low",
+            Self::Moderate => "Moderate",
+            Self::High => "High",
+            Self::VeryHigh => "Very high",
+        }
+    }
+
+    pub fn emoji(&self) -> &'static str {
+        match self {
+            Self::Low => "🟢",
+            Self::Moderate => "🟡",
+            Self::High => "🟠",
+            Self::VeryHigh => "🔴",
+        }
+    }
+}
+
+/// Calculate saturated fat density: grams of saturated fat per 100 kcal.
+/// Returns None if energy or saturated fat data is missing or energy is near zero.
+pub fn classify_sat_fat_density(product: &Product) -> Option<SatFatDensity> {
+    let n = product.nutriments.as_ref()?;
+    let kcal = n.energy_kcal_100g?;
+    let sat_fat = n.saturated_fat_100g?;
+    if kcal < 1.0 {
+        return None;
+    }
+    let per_100 = sat_fat / kcal * 100.0;
+    Some(match per_100 {
+        x if x < 1.0 => SatFatDensity::Low,
+        x if x < 3.0 => SatFatDensity::Moderate,
+        x if x < 6.0 => SatFatDensity::High,
+        _ => SatFatDensity::VeryHigh,
+    })
+}
+
+#[cfg(test)]
+mod sat_fat_density_tests {
+    use super::*;
+    use crate::api::{Nutriments, Product};
+
+    fn make_product_sat_fat(kcal: f64, sat_fat: f64) -> Product {
+        Product {
+            code: "1".into(),
+            product_name: Some("Test".into()),
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(kcal),
+                saturated_fat_100g: Some(sat_fat),
+                ..Default::default()
+            }),
+            ingredients_text: None,
+            categories: None,
+            image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_classify_sat_fat_density_low() {
+        // 0.5g sat fat per 100kcal => Low
+        let p = make_product_sat_fat(100.0, 0.5);
+        assert_eq!(classify_sat_fat_density(&p), Some(SatFatDensity::Low));
+    }
+
+    #[test]
+    fn test_classify_sat_fat_density_moderate() {
+        // 2g sat fat per 100kcal => Moderate
+        let p = make_product_sat_fat(100.0, 2.0);
+        assert_eq!(classify_sat_fat_density(&p), Some(SatFatDensity::Moderate));
+    }
+
+    #[test]
+    fn test_classify_sat_fat_density_high() {
+        // 4g sat fat per 100kcal => High
+        let p = make_product_sat_fat(100.0, 4.0);
+        assert_eq!(classify_sat_fat_density(&p), Some(SatFatDensity::High));
+    }
+
+    #[test]
+    fn test_classify_sat_fat_density_very_high() {
+        // 8g sat fat per 100kcal => VeryHigh
+        let p = make_product_sat_fat(100.0, 8.0);
+        assert_eq!(classify_sat_fat_density(&p), Some(SatFatDensity::VeryHigh));
+    }
+
+    #[test]
+    fn test_classify_sat_fat_density_none_without_data() {
+        let p = Product {
+            code: "1".into(), product_name: None, brands: None,
+            nutriscore_grade: None, nova_group: None, additives_tags: None,
+            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+        };
+        assert_eq!(classify_sat_fat_density(&p), None);
+    }
+
+    #[test]
+    fn test_classify_sat_fat_density_zero_kcal() {
+        let p = make_product_sat_fat(0.0, 3.0);
+        assert_eq!(classify_sat_fat_density(&p), None);
+    }
+
+    #[test]
+    fn test_analysis_includes_sat_fat_density() {
+        let mut p = make_product_sat_fat(100.0, 2.0);
+        p.nutriscore_grade = Some("b".into());
+        p.nova_group = Some(2);
+        let a = analyze(&p);
+        assert!(a.sat_fat_density.is_some());
     }
 }
