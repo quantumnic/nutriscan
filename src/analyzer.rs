@@ -245,6 +245,7 @@ pub struct Analysis {
     pub fiber_density: Option<FiberDensity>,
     pub sugar_density: Option<SugarDensity>,
     pub sat_fat_density: Option<SatFatDensity>,
+    pub salt_density: Option<SaltDensity>,
     pub product: Product,
 }
 
@@ -285,6 +286,7 @@ pub fn analyze(product: &Product) -> Analysis {
     let fiber_density = classify_fiber_density(product);
     let sugar_density = classify_sugar_density(product);
     let sat_fat_density = classify_sat_fat_density(product);
+    let salt_density = classify_salt_density(product);
 
     Analysis {
         product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
@@ -300,6 +302,7 @@ pub fn analyze(product: &Product) -> Analysis {
         fiber_density,
         sugar_density,
         sat_fat_density,
+        salt_density,
         product: product.clone(),
     }
 }
@@ -1230,5 +1233,135 @@ mod sat_fat_density_tests {
         p.nova_group = Some(2);
         let a = analyze(&p);
         assert!(a.sat_fat_density.is_some());
+    }
+}
+
+/// Salt density classification based on grams of salt per 100 kcal.
+/// WHO recommends < 5 g salt per day; higher density means more salt per calorie.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SaltDensity {
+    /// < 0.3 g salt per 100 kcal
+    Low,
+    /// 0.3-0.8 g salt per 100 kcal
+    Moderate,
+    /// 0.8-1.5 g salt per 100 kcal
+    High,
+    /// > 1.5 g salt per 100 kcal (e.g. soy sauce, cured meats, pickles)
+    VeryHigh,
+}
+
+impl SaltDensity {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Low => "Low",
+            Self::Moderate => "Moderate",
+            Self::High => "High",
+            Self::VeryHigh => "Very high",
+        }
+    }
+
+    pub fn emoji(&self) -> &'static str {
+        match self {
+            Self::Low => "🟢",
+            Self::Moderate => "🟡",
+            Self::High => "🟠",
+            Self::VeryHigh => "🔴",
+        }
+    }
+}
+
+/// Calculate salt density: grams of salt per 100 kcal.
+/// Returns None if energy or salt data is missing or energy is near zero.
+pub fn classify_salt_density(product: &Product) -> Option<SaltDensity> {
+    let n = product.nutriments.as_ref()?;
+    let kcal = n.energy_kcal_100g?;
+    let salt = n.salt_100g?;
+    if kcal < 1.0 {
+        return None;
+    }
+    let per_100 = salt / kcal * 100.0;
+    Some(match per_100 {
+        x if x < 0.3 => SaltDensity::Low,
+        x if x < 0.8 => SaltDensity::Moderate,
+        x if x < 1.5 => SaltDensity::High,
+        _ => SaltDensity::VeryHigh,
+    })
+}
+
+#[cfg(test)]
+mod salt_density_tests {
+    use super::*;
+    use crate::api::{Nutriments, Product};
+
+    fn make_product_salt(kcal: f64, salt: f64) -> Product {
+        Product {
+            code: "1".into(),
+            product_name: Some("Test".into()),
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(kcal),
+                salt_100g: Some(salt),
+                ..Default::default()
+            }),
+            ingredients_text: None,
+            categories: None,
+            image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_classify_salt_density_low() {
+        // 0.2g salt per 100kcal => Low
+        let p = make_product_salt(100.0, 0.2);
+        assert_eq!(classify_salt_density(&p), Some(SaltDensity::Low));
+    }
+
+    #[test]
+    fn test_classify_salt_density_moderate() {
+        // 0.5g salt per 100kcal => Moderate
+        let p = make_product_salt(100.0, 0.5);
+        assert_eq!(classify_salt_density(&p), Some(SaltDensity::Moderate));
+    }
+
+    #[test]
+    fn test_classify_salt_density_high() {
+        // 1.0g salt per 100kcal => High
+        let p = make_product_salt(100.0, 1.0);
+        assert_eq!(classify_salt_density(&p), Some(SaltDensity::High));
+    }
+
+    #[test]
+    fn test_classify_salt_density_very_high() {
+        // 2.0g salt per 100kcal => VeryHigh
+        let p = make_product_salt(100.0, 2.0);
+        assert_eq!(classify_salt_density(&p), Some(SaltDensity::VeryHigh));
+    }
+
+    #[test]
+    fn test_classify_salt_density_none_without_data() {
+        let p = Product {
+            code: "1".into(), product_name: None, brands: None,
+            nutriscore_grade: None, nova_group: None, additives_tags: None,
+            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+        };
+        assert_eq!(classify_salt_density(&p), None);
+    }
+
+    #[test]
+    fn test_classify_salt_density_zero_kcal() {
+        let p = make_product_salt(0.0, 1.0);
+        assert_eq!(classify_salt_density(&p), None);
+    }
+
+    #[test]
+    fn test_analysis_includes_salt_density() {
+        let mut p = make_product_salt(100.0, 0.5);
+        p.nutriscore_grade = Some("b".into());
+        p.nova_group = Some(2);
+        let a = analyze(&p);
+        assert!(a.salt_density.is_some());
     }
 }

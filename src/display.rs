@@ -1,4 +1,4 @@
-use crate::analyzer::{Analysis, AdditiveWarning, EnergyDensity, FiberDensity, MacroBalance, NutriRating, NovaGroup, ProteinDensity, SatFatDensity, SugarDensity};
+use crate::analyzer::{Analysis, AdditiveWarning, EnergyDensity, FiberDensity, MacroBalance, NutriRating, NovaGroup, ProteinDensity, SaltDensity, SatFatDensity, SugarDensity};
 use crate::api::Product;
 use colored::*;
 
@@ -88,6 +88,9 @@ pub fn print_analysis(a: &Analysis) {
 
     if let Some(ref sfd) = a.sat_fat_density {
         println!("  Sat. fat density: {} {}", sfd.emoji(), colorize_sat_fat_density(sfd));
+    }
+    if let Some(ref sld) = a.salt_density {
+        println!("  Salt density: {} {}", sld.emoji(), colorize_salt_density(sld));
     }
     println!();
 }
@@ -438,5 +441,15 @@ fn colorize_sat_fat_density(sfd: &SatFatDensity) -> colored::ColoredString {
         SatFatDensity::Moderate => sfd.label().yellow(),
         SatFatDensity::High => sfd.label().red(),
         SatFatDensity::VeryHigh => sfd.label().red().bold(),
+    }
+}
+
+fn colorize_salt_density(sld: &SaltDensity) -> colored::ColoredString {
+    use colored::Colorize;
+    match sld {
+        SaltDensity::Low => sld.label().green(),
+        SaltDensity::Moderate => sld.label().yellow(),
+        SaltDensity::High => sld.label().red(),
+        SaltDensity::VeryHigh => sld.label().red().bold(),
     }
 }
