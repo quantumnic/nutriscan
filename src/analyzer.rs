@@ -242,6 +242,7 @@ pub struct Analysis {
     pub macro_balance: MacroBalance,
     pub energy_density: Option<EnergyDensity>,
     pub protein_density: Option<ProteinDensity>,
+    pub fiber_density: Option<FiberDensity>,
     pub product: Product,
 }
 
@@ -279,6 +280,7 @@ pub fn analyze(product: &Product) -> Analysis {
     let macro_balance = assess_macro_balance(product);
     let energy_density = classify_energy_density(product);
     let protein_density = classify_protein_density(product);
+    let fiber_density = classify_fiber_density(product);
 
     Analysis {
         product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
@@ -291,6 +293,7 @@ pub fn analyze(product: &Product) -> Analysis {
         macro_balance,
         energy_density,
         protein_density,
+        fiber_density,
         product: product.clone(),
     }
 }
@@ -479,6 +482,59 @@ pub fn classify_protein_density(product: &Product) -> Option<ProteinDensity> {
         _ => ProteinDensity::VeryHigh,
     })
 }
+
+/// Fiber density classification based on grams of fiber per 100 kcal.
+/// Higher values indicate more satiating, gut-healthy foods.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FiberDensity {
+    /// < 1 g fiber per 100 kcal
+    Low,
+    /// 1-3 g fiber per 100 kcal
+    Moderate,
+    /// 3-6 g fiber per 100 kcal
+    High,
+    /// > 6 g fiber per 100 kcal (e.g. beans, berries, bran)
+    VeryHigh,
+}
+
+impl FiberDensity {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Low => "Low",
+            Self::Moderate => "Moderate",
+            Self::High => "High",
+            Self::VeryHigh => "Very high",
+        }
+    }
+
+    pub fn emoji(&self) -> &'static str {
+        match self {
+            Self::Low => "🔻",
+            Self::Moderate => "➖",
+            Self::High => "🌿",
+            Self::VeryHigh => "🥦",
+        }
+    }
+}
+
+/// Calculate fiber density: grams of fiber per 100 kcal.
+/// Returns None if energy or fiber data is missing or energy is near zero.
+pub fn classify_fiber_density(product: &Product) -> Option<FiberDensity> {
+    let n = product.nutriments.as_ref()?;
+    let kcal = n.energy_kcal_100g?;
+    let fiber = n.fiber_100g?;
+    if kcal < 1.0 {
+        return None;
+    }
+    let per_100 = fiber / kcal * 100.0;
+    Some(match per_100 {
+        x if x < 1.0 => FiberDensity::Low,
+        x if x < 3.0 => FiberDensity::Moderate,
+        x if x < 6.0 => FiberDensity::High,
+        _ => FiberDensity::VeryHigh,
+    })
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -848,4 +904,65 @@ mod tests {
         let a = analyze(&p);
         assert!(a.protein_density.is_some());
     }
+    #[test]
+    fn test_classify_fiber_density_low() {
+        let mut p = make_product(None, None, vec![]);
+        // 0.5g fiber per 100kcal = 0.5 per 100 => Low
+        p.nutriments = Some(Nutriments {
+            energy_kcal_100g: Some(100.0),
+            fiber_100g: Some(0.5),
+            ..Default::default()
+        });
+        assert_eq!(classify_fiber_density(&p), Some(FiberDensity::Low));
+    }
+
+    #[test]
+    fn test_classify_fiber_density_moderate() {
+        let mut p = make_product(None, None, vec![]);
+        p.nutriments = Some(Nutriments {
+            energy_kcal_100g: Some(100.0),
+            fiber_100g: Some(2.0),
+            ..Default::default()
+        });
+        assert_eq!(classify_fiber_density(&p), Some(FiberDensity::Moderate));
+    }
+
+    #[test]
+    fn test_classify_fiber_density_high() {
+        let mut p = make_product(None, None, vec![]);
+        p.nutriments = Some(Nutriments {
+            energy_kcal_100g: Some(100.0),
+            fiber_100g: Some(4.0),
+            ..Default::default()
+        });
+        assert_eq!(classify_fiber_density(&p), Some(FiberDensity::High));
+    }
+
+    #[test]
+    fn test_classify_fiber_density_very_high() {
+        let mut p = make_product(None, None, vec![]);
+        // 8g fiber per 100kcal => VeryHigh
+        p.nutriments = Some(Nutriments {
+            energy_kcal_100g: Some(100.0),
+            fiber_100g: Some(8.0),
+            ..Default::default()
+        });
+        assert_eq!(classify_fiber_density(&p), Some(FiberDensity::VeryHigh));
+    }
+
+    #[test]
+    fn test_classify_fiber_density_none_without_data() {
+        let mut p = make_product(None, None, vec![]);
+        p.nutriments = None;
+        assert_eq!(classify_fiber_density(&p), None);
+    }
+
+    #[test]
+    fn test_analysis_includes_fiber_density() {
+        let p = make_product(Some("b"), Some(2), vec![]);
+        let a = analyze(&p);
+        assert!(a.fiber_density.is_some());
+    }
+
+
 }
