@@ -241,6 +241,7 @@ pub struct Analysis {
     pub health_score: Option<u32>,
     pub macro_balance: MacroBalance,
     pub energy_density: Option<EnergyDensity>,
+    pub protein_density: Option<ProteinDensity>,
     pub product: Product,
 }
 
@@ -277,6 +278,7 @@ pub fn analyze(product: &Product) -> Analysis {
 
     let macro_balance = assess_macro_balance(product);
     let energy_density = classify_energy_density(product);
+    let protein_density = classify_protein_density(product);
 
     Analysis {
         product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
@@ -288,6 +290,7 @@ pub fn analyze(product: &Product) -> Analysis {
         health_score: score,
         macro_balance,
         energy_density,
+        protein_density,
         product: product.clone(),
     }
 }
@@ -423,6 +426,58 @@ pub fn assess_macro_balance(product: &Product) -> MacroBalance {
     else if carb_pct > 75.0 { MacroBalance::HighIn("carbohydrates".to_string()) }
     else if protein_pct > 60.0 { MacroBalance::HighIn("protein".to_string()) }
     else { MacroBalance::Balanced }
+}
+
+/// Protein density classification based on grams of protein per 100 kcal.
+/// Higher values indicate more satiating, protein-rich foods.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProteinDensity {
+    /// < 5 g protein per 100 kcal
+    Low,
+    /// 5-10 g protein per 100 kcal
+    Moderate,
+    /// 10-20 g protein per 100 kcal
+    High,
+    /// > 20 g protein per 100 kcal (e.g. chicken breast, egg whites)
+    VeryHigh,
+}
+
+impl ProteinDensity {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Low => "Low",
+            Self::Moderate => "Moderate",
+            Self::High => "High",
+            Self::VeryHigh => "Very high",
+        }
+    }
+
+    pub fn emoji(&self) -> &'static str {
+        match self {
+            Self::Low => "🔻",
+            Self::Moderate => "➖",
+            Self::High => "💪",
+            Self::VeryHigh => "🏆",
+        }
+    }
+}
+
+/// Calculate protein density: grams of protein per 100 kcal.
+/// Returns None if energy or protein data is missing or energy is near zero.
+pub fn classify_protein_density(product: &Product) -> Option<ProteinDensity> {
+    let n = product.nutriments.as_ref()?;
+    let kcal = n.energy_kcal_100g?;
+    let protein = n.proteins_100g?;
+    if kcal < 1.0 {
+        return None;
+    }
+    let per_100 = protein / kcal * 100.0;
+    Some(match per_100 {
+        x if x < 5.0 => ProteinDensity::Low,
+        x if x < 10.0 => ProteinDensity::Moderate,
+        x if x < 20.0 => ProteinDensity::High,
+        _ => ProteinDensity::VeryHigh,
+    })
 }
 
 #[cfg(test)]
@@ -742,5 +797,55 @@ mod tests {
         let p = make_product(Some("b"), Some(2), vec![]);
         let a = analyze(&p);
         assert!(a.energy_density.is_some());
+    }
+
+    #[test]
+    fn test_classify_protein_density_low() {
+        let mut p = make_product(None, None, vec![]);
+        // 3g protein per 100kcal = 3.0 per 100 => Low
+        p.nutriments = Some(Nutriments {
+            energy_kcal_100g: Some(100.0),
+            proteins_100g: Some(3.0),
+            ..Default::default()
+        });
+        assert_eq!(classify_protein_density(&p), Some(ProteinDensity::Low));
+    }
+
+    #[test]
+    fn test_classify_protein_density_high() {
+        let mut p = make_product(None, None, vec![]);
+        // 15g protein per 100kcal = 15.0 per 100 => High
+        p.nutriments = Some(Nutriments {
+            energy_kcal_100g: Some(100.0),
+            proteins_100g: Some(15.0),
+            ..Default::default()
+        });
+        assert_eq!(classify_protein_density(&p), Some(ProteinDensity::High));
+    }
+
+    #[test]
+    fn test_classify_protein_density_very_high() {
+        let mut p = make_product(None, None, vec![]);
+        // 25g protein per 100kcal => VeryHigh
+        p.nutriments = Some(Nutriments {
+            energy_kcal_100g: Some(100.0),
+            proteins_100g: Some(25.0),
+            ..Default::default()
+        });
+        assert_eq!(classify_protein_density(&p), Some(ProteinDensity::VeryHigh));
+    }
+
+    #[test]
+    fn test_classify_protein_density_none_without_data() {
+        let mut p = make_product(None, None, vec![]);
+        p.nutriments = None;
+        assert_eq!(classify_protein_density(&p), None);
+    }
+
+    #[test]
+    fn test_analysis_includes_protein_density() {
+        let p = make_product(Some("b"), Some(2), vec![]);
+        let a = analyze(&p);
+        assert!(a.protein_density.is_some());
     }
 }

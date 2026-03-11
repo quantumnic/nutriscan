@@ -1,4 +1,4 @@
-use crate::analyzer::{Analysis, AdditiveWarning, EnergyDensity, MacroBalance, NutriRating, NovaGroup};
+use crate::analyzer::{Analysis, AdditiveWarning, EnergyDensity, MacroBalance, NutriRating, NovaGroup, ProteinDensity};
 use crate::api::Product;
 use colored::*;
 
@@ -72,6 +72,10 @@ pub fn print_analysis(a: &Analysis) {
 
     if let Some(ref ed) = a.energy_density {
         println!("  Energy density: {} {}", ed.emoji(), colorize_energy_density(ed));
+
+    if let Some(ref pd) = a.protein_density {
+        println!("  Protein density: {} {}", pd.emoji(), colorize_protein_density(pd));
+    }
     }
     println!();
 }
@@ -161,6 +165,16 @@ fn colorize_energy_density(ed: &EnergyDensity) -> ColoredString {
         EnergyDensity::Low => ed.label().green(),
         EnergyDensity::Medium => ed.label().yellow(),
         EnergyDensity::High => ed.label().red(),
+    }
+}
+
+fn colorize_protein_density(pd: &ProteinDensity) -> colored::ColoredString {
+    use colored::Colorize;
+    match pd {
+        ProteinDensity::Low => pd.label().red(),
+        ProteinDensity::Moderate => pd.label().yellow(),
+        ProteinDensity::High => pd.label().green(),
+        ProteinDensity::VeryHigh => pd.label().green().bold(),
     }
 }
 
