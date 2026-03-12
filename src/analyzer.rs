@@ -408,6 +408,22 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<(String, String, String
         ));
     }
 
+    // Health score comparison (higher is better)
+    let score_a = health_score(a);
+    let score_b = health_score(b);
+    let hs_winner = match (score_a, score_b) {
+        (Some(x), Some(y)) if x > y => CompareWinner::A,
+        (Some(x), Some(y)) if y > x => CompareWinner::B,
+        (Some(_), Some(_)) => CompareWinner::Tie,
+        _ => CompareWinner::Tie,
+    };
+    diffs.push((
+        "Health Score".to_string(),
+        score_a.map(|v| format!("{}/100", v)).unwrap_or_else(|| "—".into()),
+        score_b.map(|v| format!("{}/100", v)).unwrap_or_else(|| "—".into()),
+        hs_winner,
+    ));
+
     diffs
 }
 
@@ -721,6 +737,18 @@ mod tests {
         assert_eq!(sugar_row.2, "30.0");
         // Lower sugar is better, so product A should win
         assert_eq!(sugar_row.3, CompareWinner::A);
+    }
+
+    #[test]
+    fn test_compare_includes_health_score() {
+        let a = make_product(Some("a"), Some(1), vec![]);
+        let b = make_product(Some("e"), Some(4), vec!["en:e150d"]);
+        let diffs = compare_products(&a, &b);
+        let hs_row = diffs.iter().find(|(l, _, _, _)| l == "Health Score").unwrap();
+        // Product A (grade a, nova 1) should have higher health score than B (grade e, nova 4)
+        assert_eq!(hs_row.3, CompareWinner::A);
+        assert!(hs_row.1.contains("/100"));
+        assert!(hs_row.2.contains("/100"));
     }
 
     #[test]
