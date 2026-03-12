@@ -139,6 +139,47 @@ pub fn health_score(product: &Product) -> Option<u32> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum HealthRating {
+    Excellent,
+    Good,
+    Moderate,
+    Poor,
+    Bad,
+}
+
+impl HealthRating {
+    pub fn from_score(score: u32) -> Self {
+        match score {
+            80..=100 => HealthRating::Excellent,
+            60..=79 => HealthRating::Good,
+            40..=59 => HealthRating::Moderate,
+            20..=39 => HealthRating::Poor,
+            _ => HealthRating::Bad,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            HealthRating::Excellent => "Excellent",
+            HealthRating::Good => "Good",
+            HealthRating::Moderate => "Moderate",
+            HealthRating::Poor => "Poor",
+            HealthRating::Bad => "Bad",
+        }
+    }
+
+    pub fn emoji(&self) -> &'static str {
+        match self {
+            HealthRating::Excellent => "💚",
+            HealthRating::Good => "💛",
+            HealthRating::Moderate => "🧡",
+            HealthRating::Poor => "❤️",
+            HealthRating::Bad => "🖤",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AdditiveWarning {
     pub code: String,
     pub description: String,
@@ -239,6 +280,7 @@ pub struct Analysis {
     pub warnings: Vec<AdditiveWarning>,
     pub allergens: Vec<String>,
     pub health_score: Option<u32>,
+    pub health_rating: Option<HealthRating>,
     pub macro_balance: MacroBalance,
     pub energy_density: Option<EnergyDensity>,
     pub protein_density: Option<ProteinDensity>,
@@ -296,6 +338,7 @@ pub fn analyze(product: &Product) -> Analysis {
         warnings,
         allergens,
         health_score: score,
+        health_rating: score.map(HealthRating::from_score),
         macro_balance,
         energy_density,
         protein_density,
@@ -718,6 +761,36 @@ mod tests {
         ]);
         let score = health_score(&p).unwrap();
         assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_health_rating_from_score() {
+        assert_eq!(HealthRating::from_score(90), HealthRating::Excellent);
+        assert_eq!(HealthRating::from_score(80), HealthRating::Excellent);
+        assert_eq!(HealthRating::from_score(70), HealthRating::Good);
+        assert_eq!(HealthRating::from_score(60), HealthRating::Good);
+        assert_eq!(HealthRating::from_score(50), HealthRating::Moderate);
+        assert_eq!(HealthRating::from_score(40), HealthRating::Moderate);
+        assert_eq!(HealthRating::from_score(30), HealthRating::Poor);
+        assert_eq!(HealthRating::from_score(20), HealthRating::Poor);
+        assert_eq!(HealthRating::from_score(10), HealthRating::Bad);
+        assert_eq!(HealthRating::from_score(0), HealthRating::Bad);
+    }
+
+    #[test]
+    fn test_health_rating_labels_and_emojis() {
+        assert_eq!(HealthRating::Excellent.label(), "Excellent");
+        assert_eq!(HealthRating::Excellent.emoji(), "💚");
+        assert_eq!(HealthRating::Bad.label(), "Bad");
+        assert_eq!(HealthRating::Bad.emoji(), "🖤");
+    }
+
+    #[test]
+    fn test_analysis_includes_health_rating() {
+        let p = make_product(Some("a"), Some(1), vec![]);
+        let a = analyze(&p);
+        assert!(a.health_rating.is_some());
+        assert_eq!(a.health_rating.unwrap(), HealthRating::Excellent);
     }
 
     #[test]

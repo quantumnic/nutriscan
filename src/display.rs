@@ -1,4 +1,4 @@
-use crate::analyzer::{Analysis, AdditiveWarning, EnergyDensity, FiberDensity, MacroBalance, NutriRating, NovaGroup, ProteinDensity, SaltDensity, SatFatDensity, SugarDensity};
+use crate::analyzer::{Analysis, AdditiveWarning, EnergyDensity, FiberDensity, HealthRating, MacroBalance, NutriRating, NovaGroup, ProteinDensity, SaltDensity, SatFatDensity, SugarDensity};
 use crate::api::Product;
 use colored::*;
 
@@ -60,14 +60,10 @@ pub fn print_analysis(a: &Analysis) {
     }
 
     if let Some(score) = a.health_score {
-        let (emoji, color_label) = match score {
-            80..=100 => ("💚", format!("{}/100 — Excellent", score).green()),
-            60..=79 => ("💛", format!("{}/100 — Good", score).yellow()),
-            40..=59 => ("🧡", format!("{}/100 — Moderate", score).yellow()),
-            20..=39 => ("❤️", format!("{}/100 — Poor", score).red()),
-            _ => ("🖤", format!("{}/100 — Bad", score).red().bold()),
-        };
-        println!("  Health Score: {} {}", emoji, color_label);
+        if let Some(ref rating) = a.health_rating {
+            let color_label = colorize_health_rating(rating, score);
+            println!("  Health Score: {} {}", rating.emoji(), color_label);
+        }
     }
 
     if let Some(ref ed) = a.energy_density {
@@ -421,6 +417,17 @@ mod streak_motivation_tests {
         assert!(streak_motivation(15).contains("dedication"));
         assert!(streak_motivation(45).contains("month"));
         assert!(streak_motivation(100).contains("Legendary"));
+    }
+}
+
+fn colorize_health_rating(r: &HealthRating, score: u32) -> ColoredString {
+    let text = format!("{}/100 — {}", score, r.label());
+    match r {
+        HealthRating::Excellent => text.green(),
+        HealthRating::Good => text.yellow(),
+        HealthRating::Moderate => text.yellow(),
+        HealthRating::Poor => text.red(),
+        HealthRating::Bad => text.red().bold(),
     }
 }
 
