@@ -290,6 +290,7 @@ pub struct Analysis {
     pub sat_fat_density: Option<SatFatDensity>,
     pub salt_density: Option<SaltDensity>,
     pub ingredient_count: Option<usize>,
+    pub categories: Vec<String>,
     pub product: Product,
 }
 
@@ -332,6 +333,7 @@ pub fn analyze(product: &Product) -> Analysis {
     let sat_fat_density = classify_sat_fat_density(product);
     let salt_density = classify_salt_density(product);
     let ingredient_count = count_ingredients(product.ingredients_text.as_deref());
+    let categories = parse_categories(product.categories.as_deref());
 
     Analysis {
         product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
@@ -350,6 +352,7 @@ pub fn analyze(product: &Product) -> Analysis {
         sat_fat_density,
         salt_density,
         ingredient_count,
+        categories,
         product: product.clone(),
     }
 }
@@ -1562,5 +1565,71 @@ mod ingredient_count_tests {
             count_ingredients(Some("chocolate (cocoa (raw, roasted), sugar), milk, vanilla")),
             Some(3)
         );
+    }
+}
+
+/// Parse and clean categories from the raw Open Food Facts string.
+/// Returns up to 3 most specific (shortest) category names, de-prefixed.
+pub fn parse_categories(raw: Option<&str>) -> Vec<String> {
+    let Some(text) = raw else { return Vec::new() };
+    let text = text.trim();
+    if text.is_empty() {
+        return Vec::new();
+    }
+    let mut cats: Vec<String> = text
+        .split(',')
+        .map(|s| {
+            let s = s.trim();
+            // Strip language prefix like "en:" or "fr:"
+            if let Some((_prefix, rest)) = s.split_once(':') {
+                rest.trim().to_string()
+            } else {
+                s.to_string()
+            }
+        })
+        .filter(|s| !s.is_empty())
+        .collect();
+    // Sort by length (shorter = more specific usually) and deduplicate
+    cats.sort_by_key(|s| s.len());
+    cats.dedup();
+    cats.truncate(3);
+    cats
+}
+
+#[cfg(test)]
+mod category_tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_categories_basic() {
+        let cats = parse_categories(Some("en:Beverages, en:Sodas, en:Carbonated drinks"));
+        assert_eq!(cats.len(), 3);
+        assert_eq!(cats[0], "Sodas");
+        assert_eq!(cats[1], "Beverages");
+    }
+
+    #[test]
+    fn test_parse_categories_no_prefix() {
+        let cats = parse_categories(Some("Snacks, Chips, Potato chips"));
+        assert_eq!(cats.len(), 3);
+        assert!(cats.contains(&"Chips".to_string()));
+        assert!(cats.contains(&"Snacks".to_string()));
+    }
+
+    #[test]
+    fn test_parse_categories_none() {
+        assert!(parse_categories(None).is_empty());
+    }
+
+    #[test]
+    fn test_parse_categories_empty() {
+        assert!(parse_categories(Some("")).is_empty());
+        assert!(parse_categories(Some("  ")).is_empty());
+    }
+
+    #[test]
+    fn test_parse_categories_truncates() {
+        let cats = parse_categories(Some("a, bb, ccc, dddd, eeeee"));
+        assert_eq!(cats.len(), 3);
     }
 }

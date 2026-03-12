@@ -8,6 +8,9 @@ pub fn print_analysis(a: &Analysis) {
     if a.brands != "Unknown" {
         println!("  Brand: {}", a.brands);
     }
+    if !a.categories.is_empty() {
+        println!("  Category: {}", a.categories.join(" › "));
+    }
 
     println!(
         "  Nutri-Score: {} {}",
