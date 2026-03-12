@@ -476,6 +476,28 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
         winner: al_winner,
     });
 
+    // Additive warning count comparison (fewer is better)
+    let known = &*ADDITIVE_WARNINGS;
+    let count_bad = |p: &Product| -> Option<usize> {
+        p.additives_tags.as_ref().map(|tags| {
+            tags.iter().filter(|t| known.contains_key(t.as_str())).count()
+        })
+    };
+    let ad_a = count_bad(a);
+    let ad_b = count_bad(b);
+    let ad_winner = match (ad_a, ad_b) {
+        (Some(x), Some(y)) if x < y => CompareWinner::A,
+        (Some(x), Some(y)) if y < x => CompareWinner::B,
+        (Some(_), Some(_)) => CompareWinner::Tie,
+        _ => CompareWinner::Tie,
+    };
+    diffs.push(CompareRow {
+        label: "Additives ⚠".to_string(),
+        value_a: ad_a.map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
+        value_b: ad_b.map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
+        winner: ad_winner,
+    });
+
     diffs
 }
 
@@ -813,6 +835,17 @@ mod tests {
         let al_row = diffs.iter().find(|r| r.label == "Allergens").unwrap();
         assert_eq!(al_row.value_a, "0");
         assert_eq!(al_row.winner, CompareWinner::A);
+    }
+
+    #[test]
+    fn test_compare_includes_additive_count() {
+        let a = make_product(Some("b"), Some(2), vec![]);
+        let b = make_product(Some("b"), Some(2), vec!["en:e150d", "en:e951", "en:e621"]);
+        let diffs = compare_products(&a, &b);
+        let ad_row = diffs.iter().find(|r| r.label == "Additives ⚠").unwrap();
+        assert_eq!(ad_row.value_a, "0");
+        assert_eq!(ad_row.value_b, "3");
+        assert_eq!(ad_row.winner, CompareWinner::A);
     }
 
     #[test]
