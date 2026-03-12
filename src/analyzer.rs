@@ -1,26 +1,27 @@
 use crate::api::Product;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 /// Known problematic additives with risk descriptions.
-fn additive_warnings() -> HashMap<&'static str, &'static str> {
-    let mut m = HashMap::new();
-    m.insert("en:e150d", "Caramel color (sulfite ammonia) — potentially carcinogenic");
-    m.insert("en:e950", "Acesulfame K — artificial sweetener, controversial");
-    m.insert("en:e951", "Aspartame — artificial sweetener, controversial");
-    m.insert("en:e621", "Monosodium glutamate — flavor enhancer, may cause headaches");
-    m.insert("en:e102", "Tartrazine — azo dye, may cause hyperactivity");
-    m.insert("en:e110", "Sunset Yellow — azo dye, may cause hyperactivity");
-    m.insert("en:e122", "Azorubine — azo dye, may cause hyperactivity");
-    m.insert("en:e211", "Sodium benzoate — preservative, may form benzene with vitamin C");
-    m.insert("en:e250", "Sodium nitrite — preservative, potentially carcinogenic");
-    m.insert("en:e320", "BHA — antioxidant, possible endocrine disruptor");
-    m.insert("en:e171", "Titanium dioxide — banned in EU as food additive");
-    m.insert("en:e133", "Brilliant Blue — synthetic dye, limited studies");
-    m.insert("en:e129", "Allura Red — azo dye, may cause hyperactivity");
-    m.insert("en:e952", "Cyclamate — artificial sweetener, banned in some countries");
-    m.insert("en:e955", "Sucralose — artificial sweetener, may affect gut microbiome");
-    m
-}
+static ADDITIVE_WARNINGS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
+    HashMap::from([
+        ("en:e150d", "Caramel color (sulfite ammonia) — potentially carcinogenic"),
+        ("en:e950", "Acesulfame K — artificial sweetener, controversial"),
+        ("en:e951", "Aspartame — artificial sweetener, controversial"),
+        ("en:e621", "Monosodium glutamate — flavor enhancer, may cause headaches"),
+        ("en:e102", "Tartrazine — azo dye, may cause hyperactivity"),
+        ("en:e110", "Sunset Yellow — azo dye, may cause hyperactivity"),
+        ("en:e122", "Azorubine — azo dye, may cause hyperactivity"),
+        ("en:e211", "Sodium benzoate — preservative, may form benzene with vitamin C"),
+        ("en:e250", "Sodium nitrite — preservative, potentially carcinogenic"),
+        ("en:e320", "BHA — antioxidant, possible endocrine disruptor"),
+        ("en:e171", "Titanium dioxide — banned in EU as food additive"),
+        ("en:e133", "Brilliant Blue — synthetic dye, limited studies"),
+        ("en:e129", "Allura Red — azo dye, may cause hyperactivity"),
+        ("en:e952", "Cyclamate — artificial sweetener, banned in some countries"),
+        ("en:e955", "Sucralose — artificial sweetener, may affect gut microbiome"),
+    ])
+});
 
 /// Common allergens detected from ingredients text.
 const ALLERGEN_KEYWORDS: &[(&str, &str)] = &[
@@ -124,7 +125,7 @@ pub fn health_score(product: &Product) -> Option<u32> {
     }
 
     if let Some(ref tags) = product.additives_tags {
-        let known = additive_warnings();
+        let known = &*ADDITIVE_WARNINGS;
         let bad_count = tags.iter().filter(|t| known.contains_key(t.as_str())).count();
         if bad_count > 0 {
             has_data = true;
@@ -303,7 +304,7 @@ pub fn analyze(product: &Product) -> Analysis {
         .map(NovaGroup::from_value)
         .unwrap_or(NovaGroup::Unknown);
 
-    let known = additive_warnings();
+    let known = &*ADDITIVE_WARNINGS;
     let warnings: Vec<AdditiveWarning> = product
         .additives_tags
         .as_ref()
