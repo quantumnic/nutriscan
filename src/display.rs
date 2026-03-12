@@ -1,4 +1,4 @@
-use crate::analyzer::{Analysis, AdditiveWarning, EnergyDensity, FiberDensity, HealthRating, MacroBalance, NutriRating, NovaGroup, ProteinDensity, SaltDensity, SatFatDensity, SugarDensity};
+use crate::analyzer::{Analysis, AdditiveWarning, CompareRow, EnergyDensity, FiberDensity, HealthRating, MacroBalance, NutriRating, NovaGroup, ProteinDensity, SaltDensity, SatFatDensity, SugarDensity};
 use crate::api::Product;
 use colored::*;
 
@@ -117,7 +117,7 @@ pub fn print_warnings(warnings: &[AdditiveWarning], product_name: &str) {
     }
 }
 
-pub fn print_comparison(a: &Product, b: &Product, diffs: &[(String, String, String, crate::analyzer::CompareWinner)]) {
+pub fn print_comparison(a: &Product, b: &Product, diffs: &[CompareRow]) {
     use crate::analyzer::CompareWinner;
 
     let name_a = a.product_name.as_deref().unwrap_or("Product A");
@@ -143,18 +143,18 @@ pub fn print_comparison(a: &Product, b: &Product, diffs: &[(String, String, Stri
     let nb = b.nova_group.map(|v| v.to_string()).unwrap_or_else(|| "?".into());
     println!("  {:20} {:>12}    {:>12}", "NOVA Group", na, nb);
 
-    for (label, va, vb, winner) in diffs {
-        let indicator = match winner {
+    for row in diffs {
+        let indicator = match row.winner {
             CompareWinner::A => "◀ ",
             CompareWinner::B => " ▶",
             CompareWinner::Tie => "  ",
         };
-        println!("  {:20} {:>12} {} {:>12}", label, va, indicator, vb);
+        println!("  {:20} {:>12} {} {:>12}", row.label, row.value_a, indicator, row.value_b);
     }
 
     // Tally up wins
-    let a_wins = diffs.iter().filter(|(_, _, _, w)| *w == CompareWinner::A).count();
-    let b_wins = diffs.iter().filter(|(_, _, _, w)| *w == CompareWinner::B).count();
+    let a_wins = diffs.iter().filter(|r| r.winner == CompareWinner::A).count();
+    let b_wins = diffs.iter().filter(|r| r.winner == CompareWinner::B).count();
     if a_wins > 0 || b_wins > 0 {
         println!();
         let verdict = if a_wins > b_wins {

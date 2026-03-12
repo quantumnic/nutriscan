@@ -365,13 +365,27 @@ pub enum CompareWinner {
     Tie,
 }
 
-#[allow(clippy::type_complexity)]
-pub fn compare_products(a: &Product, b: &Product) -> Vec<(String, String, String, CompareWinner)> {
+
+/// A single row in a product comparison table.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompareRow {
+    /// Metric label (e.g. "Energy (kcal)")
+    pub label: String,
+    /// Formatted value for product A
+    pub value_a: String,
+    /// Formatted value for product B
+    pub value_b: String,
+    /// Which product wins on this metric
+    pub winner: CompareWinner,
+}
+
+pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
     let mut diffs = Vec::new();
     let na = a.nutriments.as_ref();
     let nb = b.nutriments.as_ref();
 
     // (label, getter, higher_is_better)
+    #[allow(clippy::type_complexity)]
     let fields: Vec<(&str, Box<dyn Fn(&crate::api::Nutriments) -> Option<f64>>, bool)> = vec![
         ("Energy (kcal)", Box::new(|n: &crate::api::Nutriments| n.energy_kcal_100g), false),
         ("Fat (g)", Box::new(|n| n.fat_100g), false),
@@ -403,12 +417,12 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<(String, String, String
             }
             _ => CompareWinner::Tie,
         };
-        diffs.push((
-            label.to_string(),
-            va.map(|v| format!("{:.1}", v)).unwrap_or_else(|| "—".into()),
-            vb.map(|v| format!("{:.1}", v)).unwrap_or_else(|| "—".into()),
+        diffs.push(CompareRow {
+            label: label.to_string(),
+            value_a: va.map(|v| format!("{:.1}", v)).unwrap_or_else(|| "—".into()),
+            value_b: vb.map(|v| format!("{:.1}", v)).unwrap_or_else(|| "—".into()),
             winner,
-        ));
+        });
     }
 
     // Health score comparison (higher is better)
@@ -420,12 +434,12 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<(String, String, String
         (Some(_), Some(_)) => CompareWinner::Tie,
         _ => CompareWinner::Tie,
     };
-    diffs.push((
-        "Health Score".to_string(),
-        score_a.map(|v| format!("{}/100", v)).unwrap_or_else(|| "—".into()),
-        score_b.map(|v| format!("{}/100", v)).unwrap_or_else(|| "—".into()),
-        hs_winner,
-    ));
+    diffs.push(CompareRow {
+        label: "Health Score".to_string(),
+        value_a: score_a.map(|v| format!("{}/100", v)).unwrap_or_else(|| "—".into()),
+        value_b: score_b.map(|v| format!("{}/100", v)).unwrap_or_else(|| "—".into()),
+        winner: hs_winner,
+    });
 
     // Ingredient count comparison (fewer is better)
     let ic_a = count_ingredients(a.ingredients_text.as_deref());
@@ -436,12 +450,12 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<(String, String, String
         (Some(_), Some(_)) => CompareWinner::Tie,
         _ => CompareWinner::Tie,
     };
-    diffs.push((
-        "Ingredients".to_string(),
-        ic_a.map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
-        ic_b.map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
-        ic_winner,
-    ));
+    diffs.push(CompareRow {
+        label: "Ingredients".to_string(),
+        value_a: ic_a.map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
+        value_b: ic_b.map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
+        winner: ic_winner,
+    });
 
     diffs
 }
@@ -751,11 +765,11 @@ mod tests {
         b.nutriments.as_mut().unwrap().sugars_100g = Some(30.0);
         let diffs = compare_products(&a, &b);
         assert!(diffs.len() >= 7);
-        let sugar_row = diffs.iter().find(|(l, _, _, _)| l == "Sugars (g)").unwrap();
-        assert_eq!(sugar_row.1, "10.0");
-        assert_eq!(sugar_row.2, "30.0");
+        let sugar_row = diffs.iter().find(|r| r.label == "Sugars (g)").unwrap();
+        assert_eq!(sugar_row.value_a, "10.0");
+        assert_eq!(sugar_row.value_b, "30.0");
         // Lower sugar is better, so product A should win
-        assert_eq!(sugar_row.3, CompareWinner::A);
+        assert_eq!(sugar_row.winner, CompareWinner::A);
     }
 
     #[test]
@@ -763,11 +777,11 @@ mod tests {
         let a = make_product(Some("a"), Some(1), vec![]);
         let b = make_product(Some("e"), Some(4), vec!["en:e150d"]);
         let diffs = compare_products(&a, &b);
-        let hs_row = diffs.iter().find(|(l, _, _, _)| l == "Health Score").unwrap();
+        let hs_row = diffs.iter().find(|r| r.label == "Health Score").unwrap();
         // Product A (grade a, nova 1) should have higher health score than B (grade e, nova 4)
-        assert_eq!(hs_row.3, CompareWinner::A);
-        assert!(hs_row.1.contains("/100"));
-        assert!(hs_row.2.contains("/100"));
+        assert_eq!(hs_row.winner, CompareWinner::A);
+        assert!(hs_row.value_a.contains("/100"));
+        assert!(hs_row.value_b.contains("/100"));
     }
 
     #[test]
@@ -883,9 +897,9 @@ mod tests {
             nutriments: None, ingredients_text: None, categories: None, image_url: None,
         };
         let diffs = compare_products(&a, &b);
-        for (_, _, vb, w) in &diffs {
-            assert_eq!(vb, "\u{2014}");
-            assert_eq!(*w, CompareWinner::Tie);
+        for row in &diffs {
+            assert_eq!(row.value_b, "\u{2014}");
+            assert_eq!(row.winner, CompareWinner::Tie);
         }
     }
 
@@ -905,8 +919,8 @@ mod tests {
         a.nutriments.as_mut().unwrap().fat_100g = Some(5.0);
         b.nutriments.as_mut().unwrap().fat_100g = Some(15.0);
         let diffs = compare_products(&a, &b);
-        let fat_row = diffs.iter().find(|(l, _, _, _)| l == "Fat (g)").unwrap();
-        assert_eq!(fat_row.3, CompareWinner::A);
+        let fat_row = diffs.iter().find(|r| r.label == "Fat (g)").unwrap();
+        assert_eq!(fat_row.winner, CompareWinner::A);
     }
 
     #[test]
@@ -916,8 +930,8 @@ mod tests {
         a.nutriments.as_mut().unwrap().proteins_100g = Some(5.0);
         b.nutriments.as_mut().unwrap().proteins_100g = Some(25.0);
         let diffs = compare_products(&a, &b);
-        let prot_row = diffs.iter().find(|(l, _, _, _)| l == "Proteins (g)").unwrap();
-        assert_eq!(prot_row.3, CompareWinner::B);
+        let prot_row = diffs.iter().find(|r| r.label == "Proteins (g)").unwrap();
+        assert_eq!(prot_row.winner, CompareWinner::B);
     }
 
     #[test]
@@ -925,8 +939,8 @@ mod tests {
         let a = make_product(Some("a"), Some(1), vec![]);
         let b = make_product(Some("a"), Some(1), vec![]);
         let diffs = compare_products(&a, &b);
-        for (_, _, _, w) in &diffs {
-            assert_eq!(*w, CompareWinner::Tie);
+        for row in &diffs {
+            assert_eq!(row.winner, CompareWinner::Tie);
         }
     }
 
