@@ -289,6 +289,7 @@ pub struct Analysis {
     pub sugar_density: Option<SugarDensity>,
     pub sat_fat_density: Option<SatFatDensity>,
     pub salt_density: Option<SaltDensity>,
+    pub ingredient_count: Option<usize>,
     pub product: Product,
 }
 
@@ -330,6 +331,7 @@ pub fn analyze(product: &Product) -> Analysis {
     let sugar_density = classify_sugar_density(product);
     let sat_fat_density = classify_sat_fat_density(product);
     let salt_density = classify_salt_density(product);
+    let ingredient_count = count_ingredients(product.ingredients_text.as_deref());
 
     Analysis {
         product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
@@ -347,6 +349,7 @@ pub fn analyze(product: &Product) -> Analysis {
         sugar_density,
         sat_fat_density,
         salt_density,
+        ingredient_count,
         product: product.clone(),
     }
 }
@@ -422,6 +425,22 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<(String, String, String
         score_a.map(|v| format!("{}/100", v)).unwrap_or_else(|| "—".into()),
         score_b.map(|v| format!("{}/100", v)).unwrap_or_else(|| "—".into()),
         hs_winner,
+    ));
+
+    // Ingredient count comparison (fewer is better)
+    let ic_a = count_ingredients(a.ingredients_text.as_deref());
+    let ic_b = count_ingredients(b.ingredients_text.as_deref());
+    let ic_winner = match (ic_a, ic_b) {
+        (Some(x), Some(y)) if x < y => CompareWinner::A,
+        (Some(x), Some(y)) if y < x => CompareWinner::B,
+        (Some(_), Some(_)) => CompareWinner::Tie,
+        _ => CompareWinner::Tie,
+    };
+    diffs.push((
+        "Ingredients".to_string(),
+        ic_a.map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
+        ic_b.map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
+        ic_winner,
     ));
 
     diffs
@@ -1465,5 +1484,69 @@ mod salt_density_tests {
         p.nova_group = Some(2);
         let a = analyze(&p);
         assert!(a.salt_density.is_some());
+    }
+}
+
+/// Count the number of ingredients from ingredients text.
+/// Splits on commas, ignoring nested parentheses content as separate items.
+pub fn count_ingredients(text: Option<&str>) -> Option<usize> {
+    let text = text?.trim();
+    if text.is_empty() {
+        return None;
+    }
+    // Split by commas at the top level (depth 0), ignoring commas inside parentheses
+    let mut count = 1usize;
+    let mut depth = 0i32;
+    for ch in text.chars() {
+        match ch {
+            '(' | '[' => depth += 1,
+            ')' | ']' => depth = (depth - 1).max(0),
+            ',' if depth == 0 => count += 1,
+            _ => {}
+        }
+    }
+    Some(count)
+}
+
+#[cfg(test)]
+mod ingredient_count_tests {
+    use super::*;
+
+    #[test]
+    fn test_count_simple() {
+        assert_eq!(count_ingredients(Some("water, sugar, salt")), Some(3));
+    }
+
+    #[test]
+    fn test_count_with_parentheses() {
+        // The sub-ingredients inside parens should not be counted as separate top-level items
+        assert_eq!(
+            count_ingredients(Some("flour (wheat, rye), sugar, salt")),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn test_count_single() {
+        assert_eq!(count_ingredients(Some("water")), Some(1));
+    }
+
+    #[test]
+    fn test_count_none() {
+        assert_eq!(count_ingredients(None), None);
+    }
+
+    #[test]
+    fn test_count_empty() {
+        assert_eq!(count_ingredients(Some("")), None);
+        assert_eq!(count_ingredients(Some("  ")), None);
+    }
+
+    #[test]
+    fn test_count_nested_parens() {
+        assert_eq!(
+            count_ingredients(Some("chocolate (cocoa (raw, roasted), sugar), milk, vanilla")),
+            Some(3)
+        );
     }
 }

@@ -88,6 +88,16 @@ pub fn print_analysis(a: &Analysis) {
     if let Some(ref sld) = a.salt_density {
         println!("  Salt density: {} {}", sld.emoji(), colorize_salt_density(sld));
     }
+    if let Some(count) = a.ingredient_count {
+        let label = if count <= 5 {
+            format!("{} (very short list ✓)", count).green()
+        } else if count <= 15 {
+            format!("{} (moderate)", count).yellow()
+        } else {
+            format!("{} (long list)", count).red()
+        };
+        println!("  Ingredients:  📝 {}", label);
+    }
     println!();
 }
 
