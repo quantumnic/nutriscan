@@ -460,6 +460,22 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
         winner: ic_winner,
     });
 
+    // Allergen count comparison (fewer is better)
+    let al_a = a.ingredients_text.as_deref().map(|t| detect_allergens(Some(t)));
+    let al_b = b.ingredients_text.as_deref().map(|t| detect_allergens(Some(t)));
+    let al_winner = match (&al_a, &al_b) {
+        (Some(a_list), Some(b_list)) if a_list.len() < b_list.len() => CompareWinner::A,
+        (Some(a_list), Some(b_list)) if b_list.len() < a_list.len() => CompareWinner::B,
+        (Some(_), Some(_)) => CompareWinner::Tie,
+        _ => CompareWinner::Tie,
+    };
+    diffs.push(CompareRow {
+        label: "Allergens".to_string(),
+        value_a: al_a.map(|v| v.len().to_string()).unwrap_or_else(|| "\u{2014}".into()),
+        value_b: al_b.map(|v| v.len().to_string()).unwrap_or_else(|| "\u{2014}".into()),
+        winner: al_winner,
+    });
+
     diffs
 }
 
@@ -785,6 +801,18 @@ mod tests {
         assert_eq!(hs_row.winner, CompareWinner::A);
         assert!(hs_row.value_a.contains("/100"));
         assert!(hs_row.value_b.contains("/100"));
+    }
+
+    #[test]
+    fn test_compare_includes_allergen_count() {
+        let mut a = make_product(Some("b"), Some(2), vec![]);
+        a.ingredients_text = Some("water, sugar, salt".to_string());
+        let mut b = make_product(Some("b"), Some(2), vec![]);
+        b.ingredients_text = Some("water, milk, wheat flour, soy lecithin".to_string());
+        let diffs = compare_products(&a, &b);
+        let al_row = diffs.iter().find(|r| r.label == "Allergens").unwrap();
+        assert_eq!(al_row.value_a, "0");
+        assert_eq!(al_row.winner, CompareWinner::A);
     }
 
     #[test]
