@@ -54,16 +54,30 @@ const ALLERGEN_KEYWORDS: &[(&str, &str)] = &[
 ];
 
 /// Detect potential allergens from ingredients text.
-pub fn detect_allergens(ingredients: Option<&str>) -> Vec<String> {
-    let Some(text) = ingredients else {
-        return Vec::new();
+pub fn detect_allergens(ingredients: Option<&str>, allergen_tags: Option<&[String]>) -> Vec<String> {
+    let mut found: Vec<String> = if let Some(text) = ingredients {
+        let lower = text.to_lowercase();
+        ALLERGEN_KEYWORDS
+            .iter()
+            .filter(|(keyword, _)| lower.contains(keyword))
+            .map(|(_, allergen)| allergen.to_string())
+            .collect()
+    } else {
+        Vec::new()
     };
-    let lower = text.to_lowercase();
-    let mut found: Vec<String> = ALLERGEN_KEYWORDS
-        .iter()
-        .filter(|(keyword, _)| lower.contains(keyword))
-        .map(|(_, allergen)| allergen.to_string())
-        .collect();
+    // Also incorporate API-provided allergen tags (e.g. "en:milk", "en:gluten")
+    if let Some(tags) = allergen_tags {
+        for tag in tags {
+            // Tags look like "en:milk", "en:gluten", etc.
+            let tag_lower = tag.to_lowercase();
+            let label = tag_lower.split(':').next_back().unwrap_or("");
+            for &(keyword, allergen) in ALLERGEN_KEYWORDS {
+                if label.contains(keyword) && !found.contains(&allergen.to_string()) {
+                    found.push(allergen.to_string());
+                }
+            }
+        }
+    }
     found.sort();
     found.dedup();
     found
@@ -322,7 +336,7 @@ pub fn analyze(product: &Product) -> Analysis {
         })
         .unwrap_or_default();
 
-    let allergens = detect_allergens(product.ingredients_text.as_deref());
+    let allergens = detect_allergens(product.ingredients_text.as_deref(), product.allergens_tags.as_deref());
     let score = health_score(product);
 
     let macro_balance = assess_macro_balance(product);
@@ -497,8 +511,8 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
     });
 
     // Allergen count comparison (fewer is better)
-    let al_a = a.ingredients_text.as_deref().map(|t| detect_allergens(Some(t)));
-    let al_b = b.ingredients_text.as_deref().map(|t| detect_allergens(Some(t)));
+    let al_a = Some(detect_allergens(a.ingredients_text.as_deref(), a.allergens_tags.as_deref()));
+    let al_b = Some(detect_allergens(b.ingredients_text.as_deref(), b.allergens_tags.as_deref()));
     let al_winner = match (&al_a, &al_b) {
         (Some(a_list), Some(b_list)) if a_list.len() < b_list.len() => CompareWinner::A,
         (Some(a_list), Some(b_list)) if b_list.len() < a_list.len() => CompareWinner::B,
@@ -740,7 +754,7 @@ mod tests {
             }),
             ingredients_text: None,
             categories: None,
-            image_url: None,
+            allergens_tags: None, image_url: None,
         }
     }
 
@@ -777,7 +791,7 @@ mod tests {
 
     #[test]
     fn test_detect_allergens_found() {
-        let allergens = detect_allergens(Some("water, milk, wheat flour, soy lecithin"));
+        let allergens = detect_allergens(Some("water, milk, wheat flour, soy lecithin"), None);
         assert!(allergens.contains(&"Milk/Dairy".to_string()));
         assert!(allergens.contains(&"Wheat/Gluten".to_string()));
         assert!(allergens.contains(&"Soy".to_string()));
@@ -785,13 +799,13 @@ mod tests {
 
     #[test]
     fn test_detect_allergens_none() {
-        let allergens = detect_allergens(Some("water, sugar, salt"));
+        let allergens = detect_allergens(Some("water, sugar, salt"), None);
         assert!(allergens.is_empty());
     }
 
     #[test]
     fn test_detect_allergens_no_text() {
-        let allergens = detect_allergens(None);
+        let allergens = detect_allergens(None, None);
         assert!(allergens.is_empty());
     }
 
@@ -821,7 +835,7 @@ mod tests {
             nutriments: None,
             ingredients_text: None,
             categories: None,
-            image_url: None,
+            allergens_tags: None, image_url: None,
         };
         assert!(health_score(&p).is_none());
     }
@@ -976,14 +990,14 @@ mod tests {
         let p = Product {
             code: "1".into(), product_name: None, brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
         };
         assert_eq!(assess_macro_balance(&p), MacroBalance::Unknown);
     }
 
     #[test]
     fn test_allergen_dedup() {
-        let allergens = detect_allergens(Some("milk, lactose, cream"));
+        let allergens = detect_allergens(Some("milk, lactose, cream"), None);
         let dairy_count = allergens.iter().filter(|a| a.as_str() == "Milk/Dairy").count();
         assert_eq!(dairy_count, 1);
     }
@@ -994,17 +1008,20 @@ mod tests {
         let b = Product {
             code: "2".into(), product_name: Some("Empty".into()), brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
         };
         let diffs = compare_products(&a, &b);
         for row in &diffs {
-            // Nutri-Score/NOVA use "?" for missing; nutriment rows use em-dash
+            // Nutri-Score/NOVA use "?" for missing; nutriment rows use em-dash;
+            // count-based rows (Allergens, Additives, Ingredients) use "0" for empty
             let expected = if row.label == "Nutri-Score" || row.label == "NOVA Group" {
                 "?"
+            } else if row.label == "Allergens" || row.label == "Additives" {
+                "0"
             } else {
                 "\u{2014}"
             };
-            assert_eq!(row.value_b, expected);
+            assert_eq!(row.value_b, expected, "unexpected value_b for row '{}'", row.label);
             assert_eq!(row.winner, CompareWinner::Tie);
         }
     }
@@ -1118,7 +1135,7 @@ mod tests {
         let p = Product {
             code: "1".into(), product_name: None, brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
         };
         assert_eq!(classify_energy_density(&p), None);
     }
@@ -1321,7 +1338,7 @@ mod sugar_density_tests {
             }),
             ingredients_text: None,
             categories: None,
-            image_url: None,
+            allergens_tags: None, image_url: None,
         }
     }
 
@@ -1358,7 +1375,7 @@ mod sugar_density_tests {
         let p = Product {
             code: "1".into(), product_name: None, brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
         };
         assert_eq!(classify_sugar_density(&p), None);
     }
@@ -1451,7 +1468,7 @@ mod sat_fat_density_tests {
             }),
             ingredients_text: None,
             categories: None,
-            image_url: None,
+            allergens_tags: None, image_url: None,
         }
     }
 
@@ -1488,7 +1505,7 @@ mod sat_fat_density_tests {
         let p = Product {
             code: "1".into(), product_name: None, brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
         };
         assert_eq!(classify_sat_fat_density(&p), None);
     }
@@ -1581,7 +1598,7 @@ mod salt_density_tests {
             }),
             ingredients_text: None,
             categories: None,
-            image_url: None,
+            allergens_tags: None, image_url: None,
         }
     }
 
@@ -1618,7 +1635,7 @@ mod salt_density_tests {
         let p = Product {
             code: "1".into(), product_name: None, brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
         };
         assert_eq!(classify_salt_density(&p), None);
     }
@@ -1766,5 +1783,33 @@ mod category_tests {
     fn test_parse_categories_truncates() {
         let cats = parse_categories(Some("a, bb, ccc, dddd, eeeee"));
         assert_eq!(cats.len(), 3);
+    }
+}
+
+#[cfg(test)]
+mod allergen_tag_tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_allergens_from_tags() {
+        let tags = vec!["en:milk".to_string(), "en:gluten".to_string()];
+        let allergens = detect_allergens(None, Some(&tags));
+        assert!(allergens.contains(&"Milk/Dairy".to_string()));
+        assert!(allergens.contains(&"Gluten".to_string()));
+    }
+
+    #[test]
+    fn test_detect_allergens_tags_dedup_with_text() {
+        let tags = vec!["en:milk".to_string()];
+        let allergens = detect_allergens(Some("contains milk"), Some(&tags));
+        // Should not duplicate
+        assert_eq!(allergens.iter().filter(|a| *a == "Milk/Dairy").count(), 1);
+    }
+
+    #[test]
+    fn test_detect_allergens_empty_tags() {
+        let tags: Vec<String> = vec![];
+        let allergens = detect_allergens(Some("water"), Some(&tags));
+        assert!(allergens.is_empty());
     }
 }

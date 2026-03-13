@@ -27,6 +27,7 @@ impl Cache {
     fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<Product> {
         let additives_json: Option<String> = row.get(5)?;
         let nutriments_json: Option<String> = row.get(6)?;
+        let allergens_json: Option<String> = row.get(10)?;
         Ok(Product {
             code: row.get(0)?,
             product_name: row.get(1)?,
@@ -37,6 +38,7 @@ impl Cache {
             nutriments: nutriments_json.and_then(|s| serde_json::from_str(&s).ok()),
             ingredients_text: row.get(7)?,
             categories: row.get(8)?,
+            allergens_tags: allergens_json.and_then(|s| serde_json::from_str(&s).ok()),
             image_url: row.get(9)?,
         })
     }
@@ -54,6 +56,7 @@ impl Cache {
                 ingredients_text TEXT,
                 categories TEXT,
                 image_url TEXT,
+                allergens_json TEXT,
                 updated_at TEXT DEFAULT (datetime('now'))
             );
             CREATE INDEX IF NOT EXISTS idx_product_name ON products(product_name);",
@@ -64,8 +67,8 @@ impl Cache {
         self.conn.execute(
             "INSERT OR REPLACE INTO products
              (code, product_name, brands, nutriscore_grade, nova_group,
-              additives_json, nutriments_json, ingredients_text, categories, image_url)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+              additives_json, nutriments_json, ingredients_text, categories, image_url, allergens_json)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
             params![
                 p.code,
                 p.product_name,
@@ -77,6 +80,7 @@ impl Cache {
                 p.ingredients_text,
                 p.categories,
                 p.image_url,
+                serde_json::to_string(&p.allergens_tags).ok(),
             ],
         )?;
         Ok(())
@@ -86,7 +90,8 @@ impl Cache {
         let pattern = format!("%{}%", query);
         let mut stmt = self.conn.prepare(
             "SELECT code, product_name, brands, nutriscore_grade, nova_group,
-                    additives_json, nutriments_json, ingredients_text, categories, image_url
+                    additives_json, nutriments_json, ingredients_text, categories, image_url,
+                    allergens_json
              FROM products
              WHERE product_name LIKE ?1 OR brands LIKE ?1 OR categories LIKE ?1
              LIMIT 20",
@@ -105,7 +110,8 @@ impl Cache {
     fn search_exact_code(&self, code: &str) -> SqlResult<Vec<Product>> {
         let mut stmt = self.conn.prepare(
             "SELECT code, product_name, brands, nutriscore_grade, nova_group,
-                    additives_json, nutriments_json, ingredients_text, categories, image_url
+                    additives_json, nutriments_json, ingredients_text, categories, image_url,
+                    allergens_json
              FROM products WHERE code = ?1",
         )?;
         let rows = stmt.query_map(params![code], Self::row_to_product)?;
@@ -146,7 +152,8 @@ impl Cache {
     pub fn recent(&self, limit: u32) -> SqlResult<Vec<Product>> {
         let mut stmt = self.conn.prepare(
             "SELECT code, product_name, brands, nutriscore_grade, nova_group,
-                    additives_json, nutriments_json, ingredients_text, categories, image_url
+                    additives_json, nutriments_json, ingredients_text, categories, image_url,
+                    allergens_json
              FROM products ORDER BY updated_at DESC LIMIT ?1",
         )?;
         let rows = stmt.query_map(params![limit], Self::row_to_product)?;
@@ -194,6 +201,7 @@ mod tests {
             }),
             ingredients_text: Some("water, sugar".to_string()),
             categories: Some("beverages".to_string()),
+            allergens_tags: None,
             image_url: None,
         }
     }

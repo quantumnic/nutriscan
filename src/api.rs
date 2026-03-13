@@ -15,6 +15,7 @@ pub struct Product {
     pub nutriments: Option<Nutriments>,
     pub ingredients_text: Option<String>,
     pub categories: Option<String>,
+    pub allergens_tags: Option<Vec<String>>,
     pub image_url: Option<String>,
 }
 
@@ -163,6 +164,7 @@ mod tests {
             "additives_tags": ["en:e100"],
             "nutriments": {"energy_kcal_100g": 100.0},
             "ingredients_text": "water",
+            "allergens_tags": ["en:milk"],
             "categories": "beverages",
             "image_url": null
         }"#;
