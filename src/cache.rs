@@ -22,6 +22,25 @@ impl Cache {
         Ok(cache)
     }
 
+
+    /// Map a database row to a Product (shared across queries).
+    fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<Product> {
+        let additives_json: Option<String> = row.get(5)?;
+        let nutriments_json: Option<String> = row.get(6)?;
+        Ok(Product {
+            code: row.get(0)?,
+            product_name: row.get(1)?,
+            brands: row.get(2)?,
+            nutriscore_grade: row.get(3)?,
+            nova_group: row.get(4)?,
+            additives_tags: additives_json.and_then(|s| serde_json::from_str(&s).ok()),
+            nutriments: nutriments_json.and_then(|s| serde_json::from_str(&s).ok()),
+            ingredients_text: row.get(7)?,
+            categories: row.get(8)?,
+            image_url: row.get(9)?,
+        })
+    }
+
     fn init_tables(&self) -> SqlResult<()> {
         self.conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS products (
@@ -72,24 +91,7 @@ impl Cache {
              WHERE product_name LIKE ?1 OR brands LIKE ?1 OR categories LIKE ?1
              LIMIT 20",
         )?;
-        let rows = stmt.query_map(params![pattern], |row| {
-            let additives_json: Option<String> = row.get(5)?;
-            let nutriments_json: Option<String> = row.get(6)?;
-            Ok(Product {
-                code: row.get(0)?,
-                product_name: row.get(1)?,
-                brands: row.get(2)?,
-                nutriscore_grade: row.get(3)?,
-                nova_group: row.get(4)?,
-                additives_tags: additives_json
-                    .and_then(|s| serde_json::from_str(&s).ok()),
-                nutriments: nutriments_json
-                    .and_then(|s| serde_json::from_str(&s).ok()),
-                ingredients_text: row.get(7)?,
-                categories: row.get(8)?,
-                image_url: row.get(9)?,
-            })
-        })?;
+        let rows = stmt.query_map(params![pattern], Self::row_to_product)?;
         rows.collect()
     }
 
@@ -106,22 +108,7 @@ impl Cache {
                     additives_json, nutriments_json, ingredients_text, categories, image_url
              FROM products WHERE code = ?1",
         )?;
-        let rows = stmt.query_map(params![code], |row| {
-            let additives_json: Option<String> = row.get(5)?;
-            let nutriments_json: Option<String> = row.get(6)?;
-            Ok(Product {
-                code: row.get(0)?,
-                product_name: row.get(1)?,
-                brands: row.get(2)?,
-                nutriscore_grade: row.get(3)?,
-                nova_group: row.get(4)?,
-                additives_tags: additives_json.and_then(|s| serde_json::from_str(&s).ok()),
-                nutriments: nutriments_json.and_then(|s| serde_json::from_str(&s).ok()),
-                ingredients_text: row.get(7)?,
-                categories: row.get(8)?,
-                image_url: row.get(9)?,
-            })
-        })?;
+        let rows = stmt.query_map(params![code], Self::row_to_product)?;
         rows.collect()
     }
 
@@ -162,22 +149,7 @@ impl Cache {
                     additives_json, nutriments_json, ingredients_text, categories, image_url
              FROM products ORDER BY updated_at DESC LIMIT ?1",
         )?;
-        let rows = stmt.query_map(params![limit], |row| {
-            let additives_json: Option<String> = row.get(5)?;
-            let nutriments_json: Option<String> = row.get(6)?;
-            Ok(Product {
-                code: row.get(0)?,
-                product_name: row.get(1)?,
-                brands: row.get(2)?,
-                nutriscore_grade: row.get(3)?,
-                nova_group: row.get(4)?,
-                additives_tags: additives_json.and_then(|s| serde_json::from_str(&s).ok()),
-                nutriments: nutriments_json.and_then(|s| serde_json::from_str(&s).ok()),
-                ingredients_text: row.get(7)?,
-                categories: row.get(8)?,
-                image_url: row.get(9)?,
-            })
-        })?;
+        let rows = stmt.query_map(params![limit], Self::row_to_product)?;
         rows.collect()
     }
 
