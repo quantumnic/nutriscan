@@ -371,6 +371,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     daily_log.log_product(&date, &p, servings)?;
                     db.upsert(&p)?;
                     println!("✅ Logged {:.1}× {} for {}", servings, name, date);
+
+                    // Show running daily totals after logging
+                    let summary = daily_log.summary(&date)?;
+                    let entry_count = summary.entries.len();
+                    println!(
+                        "   📊 Today so far: {:.0} kcal | P {:.0}g | C {:.0}g | F {:.0}g ({} item{})",
+                        summary.total_kcal,
+                        summary.total_protein,
+                        summary.total_carbs,
+                        summary.total_fat,
+                        entry_count,
+                        if entry_count == 1 { "" } else { "s" },
+                    );
                 }
                 None => println!("Product '{}' not found.", query),
             }
