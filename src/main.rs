@@ -287,9 +287,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Commands::Stats => {
+            // Daily log stats
+            let daily_stats = daily_log.stats()?;
+
             let (bytes, count) = db.size_info()?;
             let kb = bytes as f64 / 1024.0;
             println!("Cache: {} products stored ({:.1} KB)", count, kb);
+            if daily_stats.logged_days > 0 {
+                println!(
+                    "Daily log: {} entries across {} day(s) ({} → {})",
+                    daily_stats.total_entries,
+                    daily_stats.logged_days,
+                    daily_stats.first_date.as_deref().unwrap_or("?"),
+                    daily_stats.last_date.as_deref().unwrap_or("?"),
+                );
+                let streak = daily_log.streak(&today())?;
+                if streak > 0 {
+                    println!("Streak: {} consecutive day(s)", streak);
+                }
+            } else {
+                println!("Daily log: no entries yet.");
+            }
         }
         Commands::History { limit } => {
             let products = db.recent(limit)?;

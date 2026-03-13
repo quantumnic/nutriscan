@@ -800,3 +800,102 @@ mod streak_tests {
         assert_eq!(log.streak("2026-03-09").unwrap(), 2);
     }
 }
+
+/// Summary statistics for the daily log database.
+#[derive(Debug)]
+pub struct DailyStats {
+    /// Total number of logged entries across all days.
+    pub total_entries: u64,
+    /// Number of distinct days with at least one entry.
+    pub logged_days: u64,
+    /// Earliest logged date (YYYY-MM-DD), if any.
+    pub first_date: Option<String>,
+    /// Latest logged date (YYYY-MM-DD), if any.
+    pub last_date: Option<String>,
+}
+
+impl DailyLog {
+    /// Aggregate statistics across the entire daily log.
+    pub fn stats(&self) -> SqlResult<DailyStats> {
+        let total_entries: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM daily_log",
+            [],
+            |row| row.get(0),
+        )?;
+        let logged_days: u64 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT date) FROM daily_log",
+            [],
+            |row| row.get(0),
+        )?;
+        let first_date: Option<String> = self.conn.query_row(
+            "SELECT MIN(date) FROM daily_log",
+            [],
+            |row| row.get(0),
+        )?;
+        let last_date: Option<String> = self.conn.query_row(
+            "SELECT MAX(date) FROM daily_log",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(DailyStats {
+            total_entries,
+            logged_days,
+            first_date,
+            last_date,
+        })
+    }
+}
+
+#[cfg(test)]
+mod daily_stats_tests {
+    use super::*;
+    use crate::api::{Product, Nutriments};
+
+    fn test_product(name: &str) -> Product {
+        Product {
+            product_name: Some(name.to_string()),
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(200.0),
+                fat_100g: Some(10.0),
+                saturated_fat_100g: Some(3.0),
+                carbohydrates_100g: Some(25.0),
+                sugars_100g: Some(5.0),
+                salt_100g: Some(0.5),
+                proteins_100g: Some(8.0),
+                fiber_100g: Some(3.0),
+            }),
+            ingredients_text: None,
+            additives_tags: None,
+            code: String::new(),
+            categories: None,
+            image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_stats_empty() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let stats = log.stats().unwrap();
+        assert_eq!(stats.total_entries, 0);
+        assert_eq!(stats.logged_days, 0);
+        assert!(stats.first_date.is_none());
+        assert!(stats.last_date.is_none());
+    }
+
+    #[test]
+    fn test_stats_with_entries() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let p = test_product("Apple");
+        log.log_product("2026-03-10", &p, 1.0).unwrap();
+        log.log_product("2026-03-10", &p, 2.0).unwrap();
+        log.log_product("2026-03-12", &p, 1.0).unwrap();
+        let stats = log.stats().unwrap();
+        assert_eq!(stats.total_entries, 3);
+        assert_eq!(stats.logged_days, 2);
+        assert_eq!(stats.first_date.as_deref(), Some("2026-03-10"));
+        assert_eq!(stats.last_date.as_deref(), Some("2026-03-12"));
+    }
+}
