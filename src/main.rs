@@ -305,6 +305,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if streak > 0 {
                     println!("Streak: {} consecutive day(s)", streak);
                 }
+                let top = daily_log.top_products(5)?;
+                if !top.is_empty() {
+                    println!("Top products:");
+                    for (i, tp) in top.iter().enumerate() {
+                        println!(
+                            "  {}. {} — logged {} time{} ({:.1} total servings)",
+                            i + 1,
+                            tp.product_name,
+                            tp.times_logged,
+                            if tp.times_logged == 1 { "" } else { "s" },
+                            tp.total_servings,
+                        );
+                    }
+                }
             } else {
                 println!("Daily log: no entries yet.");
             }

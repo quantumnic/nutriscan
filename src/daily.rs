@@ -899,3 +899,109 @@ mod daily_stats_tests {
         assert_eq!(stats.last_date.as_deref(), Some("2026-03-12"));
     }
 }
+
+/// A frequently logged product with its total log count and total servings.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopProduct {
+    pub product_name: String,
+    pub times_logged: u64,
+    pub total_servings: f64,
+}
+
+impl DailyLog {
+    /// Return the most frequently logged products, ordered by log count descending.
+    pub fn top_products(&self, limit: u32) -> SqlResult<Vec<TopProduct>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT product_name, COUNT(*) as cnt, SUM(servings) as total_srv
+             FROM daily_log
+             GROUP BY product_name
+             ORDER BY cnt DESC, total_srv DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit], |row| {
+            Ok(TopProduct {
+                product_name: row.get(0)?,
+                times_logged: row.get(1)?,
+                total_servings: row.get(2)?,
+            })
+        })?;
+        rows.collect()
+    }
+}
+
+#[cfg(test)]
+mod top_products_tests {
+    use super::*;
+    use crate::api::{Nutriments, Product};
+
+    fn make_product(code: &str, name: &str) -> Product {
+        Product {
+            code: code.to_string(),
+            product_name: Some(name.to_string()),
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(100.0),
+                fat_100g: Some(5.0),
+                saturated_fat_100g: Some(1.0),
+                carbohydrates_100g: Some(15.0),
+                sugars_100g: Some(5.0),
+                salt_100g: Some(0.3),
+                proteins_100g: Some(4.0),
+                fiber_100g: Some(2.0),
+            }),
+            ingredients_text: None,
+            categories: None,
+            additives_tags: None,
+            allergens_tags: None,
+            image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_top_products_empty() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let tops = log.top_products(5).unwrap();
+        assert!(tops.is_empty());
+    }
+
+    #[test]
+    fn test_top_products_order() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let apple = make_product("1", "Apple");
+        let bread = make_product("2", "Bread");
+        let milk = make_product("3", "Milk");
+
+        // Log apple 3 times, bread 1 time, milk 2 times
+        log.log_product("2026-03-10", &apple, 1.0).unwrap();
+        log.log_product("2026-03-10", &apple, 1.5).unwrap();
+        log.log_product("2026-03-11", &apple, 1.0).unwrap();
+        log.log_product("2026-03-10", &bread, 2.0).unwrap();
+        log.log_product("2026-03-11", &milk, 1.0).unwrap();
+        log.log_product("2026-03-12", &milk, 1.0).unwrap();
+
+        let tops = log.top_products(5).unwrap();
+        assert_eq!(tops.len(), 3);
+        assert_eq!(tops[0].product_name, "Apple");
+        assert_eq!(tops[0].times_logged, 3);
+        assert!((tops[0].total_servings - 3.5).abs() < 0.01);
+        assert_eq!(tops[1].product_name, "Milk");
+        assert_eq!(tops[1].times_logged, 2);
+        assert_eq!(tops[2].product_name, "Bread");
+        assert_eq!(tops[2].times_logged, 1);
+    }
+
+    #[test]
+    fn test_top_products_respects_limit() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let a = make_product("1", "A");
+        let b = make_product("2", "B");
+        let c = make_product("3", "C");
+        log.log_product("2026-03-10", &a, 1.0).unwrap();
+        log.log_product("2026-03-10", &b, 1.0).unwrap();
+        log.log_product("2026-03-10", &c, 1.0).unwrap();
+        let tops = log.top_products(2).unwrap();
+        assert_eq!(tops.len(), 2);
+    }
+}
