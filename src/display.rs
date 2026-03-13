@@ -136,15 +136,6 @@ pub fn print_comparison(a: &Product, b: &Product, diffs: &[CompareRow]) {
     );
     println!("  {}", "─".repeat(52));
 
-    // Nutri-Score row
-    let ga = a.nutriscore_grade.as_deref().unwrap_or("?").to_uppercase();
-    let gb = b.nutriscore_grade.as_deref().unwrap_or("?").to_uppercase();
-    println!("  {:20} {:>12}    {:>12}", "Nutri-Score", ga, gb);
-
-    // NOVA row
-    let na = a.nova_group.map(|v| v.to_string()).unwrap_or_else(|| "?".into());
-    let nb = b.nova_group.map(|v| v.to_string()).unwrap_or_else(|| "?".into());
-    println!("  {:20} {:>12}    {:>12}", "NOVA Group", na, nb);
 
     for row in diffs {
         let indicator = match row.winner {

@@ -384,6 +384,42 @@ pub struct CompareRow {
 
 pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
     let mut diffs = Vec::new();
+        // Nutri-Score comparison (A > B > C > D > E, so lower ordinal is better)
+    let grade_to_ord = |g: &str| -> Option<u8> {
+        match g.to_lowercase().as_str() {
+            "a" => Some(1), "b" => Some(2), "c" => Some(3),
+            "d" => Some(4), "e" => Some(5), _ => None,
+        }
+    };
+    let ns_a = a.nutriscore_grade.as_deref().and_then(grade_to_ord);
+    let ns_b = b.nutriscore_grade.as_deref().and_then(grade_to_ord);
+    let ns_winner = match (ns_a, ns_b) {
+        (Some(x), Some(y)) if x < y => CompareWinner::A,
+        (Some(x), Some(y)) if y < x => CompareWinner::B,
+        (Some(_), Some(_)) => CompareWinner::Tie,
+        _ => CompareWinner::Tie,
+    };
+    diffs.push(CompareRow {
+        label: "Nutri-Score".to_string(),
+        value_a: a.nutriscore_grade.as_deref().unwrap_or("?").to_uppercase(),
+        value_b: b.nutriscore_grade.as_deref().unwrap_or("?").to_uppercase(),
+        winner: ns_winner,
+    });
+
+    // NOVA Group comparison (lower is better: 1=unprocessed, 4=ultra-processed)
+    let nv_winner = match (a.nova_group, b.nova_group) {
+        (Some(x), Some(y)) if x < y => CompareWinner::A,
+        (Some(x), Some(y)) if y < x => CompareWinner::B,
+        (Some(_), Some(_)) => CompareWinner::Tie,
+        _ => CompareWinner::Tie,
+    };
+    diffs.push(CompareRow {
+        label: "NOVA Group".to_string(),
+        value_a: a.nova_group.map(|v| v.to_string()).unwrap_or_else(|| "?".into()),
+        value_b: b.nova_group.map(|v| v.to_string()).unwrap_or_else(|| "?".into()),
+        winner: nv_winner,
+    });
+
     let na = a.nutriments.as_ref();
     let nb = b.nutriments.as_ref();
 
@@ -962,7 +998,13 @@ mod tests {
         };
         let diffs = compare_products(&a, &b);
         for row in &diffs {
-            assert_eq!(row.value_b, "\u{2014}");
+            // Nutri-Score/NOVA use "?" for missing; nutriment rows use em-dash
+            let expected = if row.label == "Nutri-Score" || row.label == "NOVA Group" {
+                "?"
+            } else {
+                "\u{2014}"
+            };
+            assert_eq!(row.value_b, expected);
             assert_eq!(row.winner, CompareWinner::Tie);
         }
     }
@@ -1008,6 +1050,38 @@ mod tests {
         }
     }
 
+
+
+    #[test]
+    fn test_compare_includes_nutriscore() {
+        let a = make_product(Some("a"), Some(1), vec![]);
+        let b = make_product(Some("d"), Some(4), vec![]);
+        let diffs = compare_products(&a, &b);
+        let ns_row = diffs.iter().find(|r| r.label == "Nutri-Score").unwrap();
+        assert_eq!(ns_row.value_a, "A");
+        assert_eq!(ns_row.value_b, "D");
+        assert_eq!(ns_row.winner, CompareWinner::A);
+    }
+
+    #[test]
+    fn test_compare_includes_nova_group() {
+        let a = make_product(Some("b"), Some(3), vec![]);
+        let b = make_product(Some("b"), Some(1), vec![]);
+        let diffs = compare_products(&a, &b);
+        let nv_row = diffs.iter().find(|r| r.label == "NOVA Group").unwrap();
+        assert_eq!(nv_row.value_a, "3");
+        assert_eq!(nv_row.value_b, "1");
+        assert_eq!(nv_row.winner, CompareWinner::B);
+    }
+
+    #[test]
+    fn test_compare_nutriscore_tie() {
+        let a = make_product(Some("b"), Some(2), vec![]);
+        let b = make_product(Some("b"), Some(2), vec![]);
+        let diffs = compare_products(&a, &b);
+        let ns_row = diffs.iter().find(|r| r.label == "Nutri-Score").unwrap();
+        assert_eq!(ns_row.winner, CompareWinner::Tie);
+    }
 
     #[test]
     fn test_energy_density_very_low() {
