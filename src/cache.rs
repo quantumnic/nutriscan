@@ -345,3 +345,48 @@ mod tests {
         assert_eq!(count, 1);
     }
 }
+
+#[cfg(test)]
+mod import_tests {
+    use super::*;
+    use crate::api::Nutriments;
+
+    fn sample_product(code: &str, name: &str) -> Product {
+        Product {
+            code: code.to_string(),
+            product_name: Some(name.to_string()),
+            brands: Some("TestBrand".to_string()),
+            nutriscore_grade: Some("b".to_string()),
+            nova_group: Some(2),
+            additives_tags: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: Some(100.0),
+                ..Default::default()
+            }),
+            ingredients_text: None,
+            categories: None,
+            allergens_tags: None,
+            image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_export_import_roundtrip() {
+        // Export from one cache, import into another
+        let src = Cache::open_in_memory().unwrap();
+        src.upsert(&sample_product("001", "Alpha")).unwrap();
+        src.upsert(&sample_product("002", "Beta")).unwrap();
+        let json = src.export_json().unwrap();
+
+        let products: Vec<Product> = serde_json::from_str(&json).unwrap();
+        assert_eq!(products.len(), 2);
+
+        let dst = Cache::open_in_memory().unwrap();
+        for p in &products {
+            dst.upsert(p).unwrap();
+        }
+        assert_eq!(dst.count().unwrap(), 2);
+        assert!(dst.get_by_code("001").unwrap().is_some());
+        assert!(dst.get_by_code("002").unwrap().is_some());
+    }
+}

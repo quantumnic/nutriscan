@@ -69,6 +69,12 @@ enum Commands {
         #[arg(short, long, default_value = "nutriscan-export.json")]
         output: String,
     },
+    /// Import products from a JSON file (exported via export)
+    Import {
+        /// Input file path
+        #[arg(short, long, default_value = "nutriscan-export.json")]
+        input: String,
+    },
     /// Purge stale cache entries older than N days
     Purge {
         /// Maximum age in days
@@ -342,6 +348,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(&output, &json)?;
             let count = db.count()?;
             println!("Exported {} products to {}", count, output);
+        }
+        Commands::Import { input } => {
+            let data = std::fs::read_to_string(&input)?;
+            let products: Vec<crate::api::Product> = serde_json::from_str(&data)?;
+            let count = products.len();
+            for p in &products {
+                db.upsert(p)?;
+            }
+            println!("Imported {} products from {}", count, input);
         }
         Commands::Purge { days } => {
             let evicted = db.evict_stale(days)?;
