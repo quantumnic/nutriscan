@@ -83,6 +83,9 @@ enum Commands {
     },
     /// Log a product to daily intake tracker
     Log {
+        /// Date in YYYY-MM-DD format (defaults to today)
+        #[arg(short, long)]
+        date: Option<String>,
         /// Product name or barcode
         query: String,
         /// Number of servings (each = 100g)
@@ -362,11 +365,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let evicted = db.evict_stale(days)?;
             println!("Purged {} stale entries (older than {} days).", evicted, days);
         }
-        Commands::Log { query, servings } => {
+        Commands::Log { query, servings, date } => {
             let product = find_product(&db, &api, &query).await?;
             match product {
                 Some(p) => {
-                    let date = today();
+                    let date = date.unwrap_or_else(today);
                     let name = p.product_name.clone().unwrap_or_else(|| "Unknown".into());
                     daily_log.log_product(&date, &p, servings)?;
                     db.upsert(&p)?;
