@@ -503,3 +503,62 @@ pub fn print_running_totals(summary: &crate::daily::DailySummary, day_label: &st
         println!("   ⚡ Daily target of {:.0} kcal reached!", target);
     }
 }
+
+/// Print a ranked list of top products (used by Stats command).
+pub fn print_top_products(products: &[crate::daily::TopProduct]) {
+    if products.is_empty() {
+        return;
+    }
+    println!("{}", "Top products:".bold());
+    for (i, tp) in products.iter().enumerate() {
+        let times = tp.times_logged;
+        println!(
+            "  {}. {} — logged {} time{} ({:.1} total servings)",
+            i + 1,
+            tp.product_name.cyan(),
+            times,
+            if times == 1 { "" } else { "s" },
+            tp.total_servings,
+        );
+    }
+}
+
+#[cfg(test)]
+mod top_products_display_tests {
+    use super::*;
+    use crate::daily::TopProduct;
+
+    #[test]
+    fn test_print_top_products_empty() {
+        // Should not panic on empty list
+        print_top_products(&[]);
+    }
+
+    #[test]
+    fn test_print_top_products_single() {
+        let products = vec![TopProduct {
+            product_name: "Oats".to_string(),
+            times_logged: 1,
+            total_servings: 1.5,
+        }];
+        // Should not panic; output goes to stdout
+        print_top_products(&products);
+    }
+
+    #[test]
+    fn test_print_top_products_plural() {
+        let products = vec![
+            TopProduct {
+                product_name: "Oats".to_string(),
+                times_logged: 3,
+                total_servings: 4.0,
+            },
+            TopProduct {
+                product_name: "Rice".to_string(),
+                times_logged: 2,
+                total_servings: 2.0,
+            },
+        ];
+        print_top_products(&products);
+    }
+}
