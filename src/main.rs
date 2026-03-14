@@ -186,6 +186,36 @@ fn ymd_to_days(y: u64, m: u64, d: u64) -> u64 {
     era * 146097 + doe - 719468
 }
 
+/// Validate and normalize a YYYY-MM-DD date string.
+/// Returns Ok(date) if valid, Err with message otherwise.
+fn validate_date(s: &str) -> Result<String, String> {
+    let parts: Vec<&str> = s.split('-').collect();
+    if parts.len() != 3 {
+        return Err(format!("Invalid date format '{}': expected YYYY-MM-DD", s));
+    }
+    let y: u64 = parts[0].parse().map_err(|_| format!("Invalid year in '{}'", s))?;
+    let m: u64 = parts[1].parse().map_err(|_| format!("Invalid month in '{}'", s))?;
+    let d: u64 = parts[2].parse().map_err(|_| format!("Invalid day in '{}'", s))?;
+    if !(1..=12).contains(&m) {
+        return Err(format!("Month {} out of range (1-12) in '{}'", m, s));
+    }
+    let max_day = days_in_month(y, m);
+    if !(1..=max_day).contains(&d) {
+        return Err(format!("Day {} out of range (1-{}) for {}-{:02}", d, max_day, y, m));
+    }
+    Ok(format!("{:04}-{:02}-{:02}", y, m, d))
+}
+
+/// Return the number of days in a given month.
+fn days_in_month(y: u64, m: u64) -> u64 {
+    match m {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => if y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400)) { 29 } else { 28 },
+        _ => 30,
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
@@ -369,7 +399,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let product = find_product(&db, &api, &query).await?;
             match product {
                 Some(p) => {
-                    let date = date.unwrap_or_else(today);
+                    let date = match date {
+                        Some(d) => validate_date(&d)?,
+                        None => today(),
+                    };
                     let name = p.product_name.clone().unwrap_or_else(|| "Unknown".into());
                     daily_log.log_product(&date, &p, servings)?;
                     db.upsert(&p)?;
@@ -393,13 +426,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Daily { date, week } => {
             if week {
-                let end = date.clone().unwrap_or_else(today);
+                let end = match date {
+                    Some(d) => validate_date(&d)?,
+                    None => today(),
+                };
                 let start = date_minus_days(&end, 6);
                 let range = daily_log.date_range_summary(&start, &end)?;
                 let streak = daily_log.streak(&end)?;
                 display::print_weekly_summary(&start, &end, &range, streak);
             } else {
-                let date = date.unwrap_or_else(today);
+                let date = match date {
+                    Some(d) => validate_date(&d)?,
+                    None => today(),
+                };
                 let summary = daily_log.summary(&date)?;
                 let streak = daily_log.streak(&date)?;
                 display::print_daily_summary(&date, &summary, streak);
@@ -514,6 +553,42 @@ mod tests {
     fn test_date_minus_days() {
         assert_eq!(date_minus_days("2026-03-04", 6), "2026-02-26");
         assert_eq!(date_minus_days("2026-01-03", 3), "2025-12-31");
+    }
+
+    #[test]
+    fn test_validate_date_valid() {
+        assert_eq!(validate_date("2026-03-14").unwrap(), "2026-03-14");
+        assert_eq!(validate_date("2024-02-29").unwrap(), "2024-02-29"); // leap year
+        assert_eq!(validate_date("2026-1-5").unwrap(), "2026-01-05"); // normalizes
+    }
+
+    #[test]
+    fn test_validate_date_invalid_month() {
+        assert!(validate_date("2026-13-01").is_err());
+        assert!(validate_date("2026-00-01").is_err());
+    }
+
+    #[test]
+    fn test_validate_date_invalid_day() {
+        assert!(validate_date("2026-02-29").is_err()); // not a leap year
+        assert!(validate_date("2026-04-31").is_err()); // April has 30 days
+    }
+
+    #[test]
+    fn test_validate_date_bad_format() {
+        assert!(validate_date("20260314").is_err());
+        assert!(validate_date("not-a-date").is_err());
+        assert!(validate_date("2026-03").is_err());
+    }
+
+    #[test]
+    fn test_days_in_month() {
+        assert_eq!(days_in_month(2026, 2), 28);
+        assert_eq!(days_in_month(2024, 2), 29); // leap year
+        assert_eq!(days_in_month(2000, 2), 29); // century leap
+        assert_eq!(days_in_month(1900, 2), 28); // century non-leap
+        assert_eq!(days_in_month(2026, 1), 31);
+        assert_eq!(days_in_month(2026, 4), 30);
     }
 
 }
