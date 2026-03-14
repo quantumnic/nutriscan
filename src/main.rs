@@ -490,11 +490,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Returns true if the query looks like a barcode (8-13 digits).
+fn looks_like_barcode(query: &str) -> bool {
+    let len = query.len();
+    (8..=13).contains(&len) && query.chars().all(|c| c.is_ascii_digit())
+}
+
 async fn find_product(
     db: &cache::Cache,
     api: &api::OpenFoodFactsApi,
     query: &str,
 ) -> Result<Option<api::Product>, Box<dyn std::error::Error>> {
+    // If the query looks like a barcode, try direct barcode lookup first
+    if looks_like_barcode(query) {
+        if let Some(p) = db.get_by_code(query)? {
+            return Ok(Some(p));
+        }
+        if let Some(p) = api.get_by_barcode(query).await? {
+            db.upsert(&p)?;
+            return Ok(Some(p));
+        }
+    }
+
     let cached = db.search(query)?;
     if let Some(p) = cached.into_iter().next() {
         return Ok(Some(p));
@@ -595,4 +612,44 @@ mod tests {
         assert_eq!(days_in_month(2026, 4), 30);
     }
 
+}
+
+#[cfg(test)]
+mod barcode_detection_tests {
+    use super::*;
+
+    #[test]
+    fn test_looks_like_barcode_ean13() {
+        assert!(looks_like_barcode("5000112602791")); // 13 digits (EAN-13)
+    }
+
+    #[test]
+    fn test_looks_like_barcode_ean8() {
+        assert!(looks_like_barcode("96385074")); // 8 digits (EAN-8)
+    }
+
+    #[test]
+    fn test_looks_like_barcode_upc12() {
+        assert!(looks_like_barcode("012345678905")); // 12 digits (UPC-A)
+    }
+
+    #[test]
+    fn test_looks_like_barcode_too_short() {
+        assert!(!looks_like_barcode("1234567")); // 7 digits — too short
+    }
+
+    #[test]
+    fn test_looks_like_barcode_too_long() {
+        assert!(!looks_like_barcode("12345678901234")); // 14 digits — too long
+    }
+
+    #[test]
+    fn test_looks_like_barcode_not_digits() {
+        assert!(!looks_like_barcode("nutella12345")); // mixed
+    }
+
+    #[test]
+    fn test_looks_like_barcode_product_name() {
+        assert!(!looks_like_barcode("Nutella")); // clearly a name
+    }
 }
