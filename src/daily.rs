@@ -1005,3 +1005,116 @@ mod top_products_tests {
         assert_eq!(tops.len(), 2);
     }
 }
+
+/// Recommended Daily Values (based on a 2000 kcal diet, WHO/EU reference).
+pub struct RecommendedDailyValues;
+
+impl RecommendedDailyValues {
+    pub const KCAL: f64 = 2000.0;
+    pub const FAT: f64 = 70.0;        // g
+    pub const SATURATED_FAT: f64 = 20.0; // g
+    pub const CARBS: f64 = 260.0;      // g
+    pub const SUGAR: f64 = 50.0;       // g (WHO free sugars limit)
+    pub const PROTEIN: f64 = 50.0;     // g
+    pub const SALT: f64 = 5.0;         // g (WHO limit)
+    pub const FIBER: f64 = 25.0;       // g (WHO minimum)
+}
+
+/// Nutrient with its percentage of the recommended daily value.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct RdvEntry {
+    pub label: &'static str,
+    pub value: f64,
+    pub unit: &'static str,
+    pub rdv: f64,
+    pub pct: f64,
+}
+
+impl DailySummary {
+    /// Calculate percentage of recommended daily values for all tracked nutrients.
+    pub fn rdv_percentages(&self) -> Vec<RdvEntry> {
+        let pairs: Vec<(&str, f64, &str, f64)> = vec![
+            ("Energy", self.total_kcal, "kcal", RecommendedDailyValues::KCAL),
+            ("Fat", self.total_fat, "g", RecommendedDailyValues::FAT),
+            ("Sat. Fat", self.total_saturated_fat, "g", RecommendedDailyValues::SATURATED_FAT),
+            ("Carbs", self.total_carbs, "g", RecommendedDailyValues::CARBS),
+            ("Sugar", self.total_sugar, "g", RecommendedDailyValues::SUGAR),
+            ("Protein", self.total_protein, "g", RecommendedDailyValues::PROTEIN),
+            ("Salt", self.total_salt, "g", RecommendedDailyValues::SALT),
+            ("Fiber", self.total_fiber, "g", RecommendedDailyValues::FIBER),
+        ];
+        pairs
+            .into_iter()
+            .map(|(label, value, unit, rdv)| {
+                let pct = if rdv > 0.0 { value / rdv * 100.0 } else { 0.0 };
+                RdvEntry { label, value, unit, rdv, pct }
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod rdv_tests {
+    use super::*;
+
+    #[test]
+    fn test_rdv_percentages_empty() {
+        let summary = DailySummary::default();
+        let rdv = summary.rdv_percentages();
+        assert_eq!(rdv.len(), 8);
+        for entry in &rdv {
+            assert!((entry.pct - 0.0).abs() < f64::EPSILON);
+        }
+    }
+
+    #[test]
+    fn test_rdv_percentages_exact_targets() {
+        let summary = DailySummary {
+            entries: vec![],
+            total_kcal: 2000.0,
+            total_fat: 70.0,
+            total_saturated_fat: 20.0,
+            total_carbs: 260.0,
+            total_sugar: 50.0,
+            total_protein: 50.0,
+            total_salt: 5.0,
+            total_fiber: 25.0,
+            top_kcal_entry: None,
+        };
+        let rdv = summary.rdv_percentages();
+        for entry in &rdv {
+            assert!(
+                (entry.pct - 100.0).abs() < 0.01,
+                "{} should be 100%, got {:.1}%",
+                entry.label,
+                entry.pct
+            );
+        }
+    }
+
+    #[test]
+    fn test_rdv_percentages_half_values() {
+        let summary = DailySummary {
+            entries: vec![],
+            total_kcal: 1000.0,
+            total_fat: 35.0,
+            total_saturated_fat: 10.0,
+            total_carbs: 130.0,
+            total_sugar: 25.0,
+            total_protein: 25.0,
+            total_salt: 2.5,
+            total_fiber: 12.5,
+            top_kcal_entry: None,
+        };
+        let rdv = summary.rdv_percentages();
+        for entry in &rdv {
+            assert!(
+                (entry.pct - 50.0).abs() < 0.01,
+                "{} should be 50%, got {:.1}%",
+                entry.label,
+                entry.pct
+            );
+        }
+    }
+}

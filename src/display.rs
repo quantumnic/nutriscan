@@ -265,14 +265,24 @@ pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary, str
 
     println!();
     println!("{}", "  Totals (estimated):".bold());
-    println!("    Energy:      {:.0} kcal", summary.total_kcal);
-    println!("    Fat:         {:.1} g", summary.total_fat);
-    println!("    Carbs:       {:.1} g", summary.total_carbs);
-    println!("    Protein:     {:.1} g", summary.total_protein);
-    println!("    Sugar:       {:.1} g", summary.total_sugar);
-    println!("    Salt:        {:.2} g", summary.total_salt);
-    println!("    Fiber:       {:.1} g", summary.total_fiber);
-    println!("    Sat. Fat:    {:.1} g", summary.total_saturated_fat);
+    let rdv = summary.rdv_percentages();
+    for entry in &rdv {
+        let pct_str = format!("({:.0}% RDV)", entry.pct);
+        let colored_pct = if entry.pct > 100.0 {
+            pct_str.red()
+        } else if entry.pct > 75.0 {
+            pct_str.yellow()
+        } else {
+            pct_str.normal()
+        };
+        if entry.unit == "kcal" {
+            println!("    {:12} {:>6.0} {:4}  {}", entry.label, entry.value, entry.unit, colored_pct);
+        } else if entry.label == "Salt" {
+            println!("    {:12} {:>6.2} {:4}  {}", entry.label, entry.value, entry.unit, colored_pct);
+        } else {
+            println!("    {:12} {:>6.1} {:4}  {}", entry.label, entry.value, entry.unit, colored_pct);
+        }
+    }
 
     if summary.entries.len() > 1 {
         if let Some((ref name, kcal)) = summary.top_kcal_entry {
