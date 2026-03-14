@@ -445,12 +445,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Commands::ClearDay { date } => {
-            let date = date.unwrap_or_else(today);
+            let date = match date {
+                Some(d) => validate_date(&d)?,
+                None => today(),
+            };
             let removed = daily_log.clear_date(&date)?;
             println!("Cleared {} entries for {}.", removed, date);
         }
         Commands::Undo { date } => {
-            let date = date.unwrap_or_else(today);
+            let date = match date {
+                Some(d) => validate_date(&d)?,
+                None => today(),
+            };
             match daily_log.undo_last(&date)? {
                 Some(name) => println!("↩ Removed last entry: {} ({})", name, date),
                 None => println!("No entries to undo for {}.", date),
