@@ -410,24 +410,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Show running daily totals after logging
                     let summary = daily_log.summary(&date)?;
-                    let entry_count = summary.entries.len();
                     let day_label = if date == today() { "Today so far".to_string() } else { format!("{} so far", date) };
-                    println!(
-                        "   📊 {}: {:.0} kcal | P {:.0}g | C {:.0}g | F {:.0}g ({} item{})",
-                        day_label,
-                        summary.total_kcal,
-                        summary.total_protein,
-                        summary.total_carbs,
-                        summary.total_fat,
-                        entry_count,
-                        if entry_count == 1 { "" } else { "s" },
-                    );
-                    let remaining = 2000.0 - summary.total_kcal;
-                    if remaining > 0.0 {
-                        println!("   🎯 {:.0} kcal remaining (of 2000 kcal daily target)", remaining);
-                    } else {
-                        println!("   ⚡ Daily target of 2000 kcal reached!");
-                    }
+                    display::print_running_totals(&summary, &day_label);
                 }
                 None => println!("Product '{}' not found.", query),
             }
@@ -470,28 +454,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("↩ Removed last entry: {} ({})", name, date);
                     // Show updated daily totals after undo
                     let summary = daily_log.summary(&date)?;
-                    let entry_count = summary.entries.len();
-                    if entry_count > 0 {
-                        let day_label = if date == today() { "Today now".to_string() } else { format!("{} now", date) };
-                        println!(
-                            "   📊 {}: {:.0} kcal | P {:.0}g | C {:.0}g | F {:.0}g ({} item{})",
-                            day_label,
-                            summary.total_kcal,
-                            summary.total_protein,
-                            summary.total_carbs,
-                            summary.total_fat,
-                            entry_count,
-                            if entry_count == 1 { "" } else { "s" },
-                        );
-                        let remaining = 2000.0 - summary.total_kcal;
-                        if remaining > 0.0 {
-                            println!("   🎯 {:.0} kcal remaining (of 2000 kcal daily target)", remaining);
-                        } else {
-                            println!("   ⚡ Daily target of 2000 kcal reached!");
-                        }
-                    } else {
-                        println!("   📊 Day is now empty.");
-                    }
+                    let day_label = if date == today() { "Today now".to_string() } else { format!("{} now", date) };
+                    display::print_running_totals(&summary, &day_label);
                 }
                 None => println!("No entries to undo for {}.", date),
             }

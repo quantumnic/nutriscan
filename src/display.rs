@@ -474,3 +474,32 @@ fn colorize_salt_density(sld: &SaltDensity) -> colored::ColoredString {
         SaltDensity::VeryHigh => sld.label().red().bold(),
     }
 }
+
+/// Print a compact running-totals line after logging or undoing an entry.
+/// `day_label` is e.g. "Today so far" or "2026-03-14 now".
+pub fn print_running_totals(summary: &crate::daily::DailySummary, day_label: &str) {
+    use crate::daily::RecommendedDailyValues;
+
+    let entry_count = summary.entries.len();
+    if entry_count == 0 {
+        println!("   📊 Day is now empty.");
+        return;
+    }
+    println!(
+        "   📊 {}: {:.0} kcal | P {:.0}g | C {:.0}g | F {:.0}g ({} item{})",
+        day_label,
+        summary.total_kcal,
+        summary.total_protein,
+        summary.total_carbs,
+        summary.total_fat,
+        entry_count,
+        if entry_count == 1 { "" } else { "s" },
+    );
+    let target = RecommendedDailyValues::KCAL;
+    let remaining = target - summary.total_kcal;
+    if remaining > 0.0 {
+        println!("   🎯 {:.0} kcal remaining (of {:.0} kcal daily target)", remaining, target);
+    } else {
+        println!("   ⚡ Daily target of {:.0} kcal reached!", target);
+    }
+}
