@@ -440,7 +440,7 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
     // (label, getter, higher_is_better)
     #[allow(clippy::type_complexity)]
     let fields: Vec<(&str, Box<dyn Fn(&crate::api::Nutriments) -> Option<f64>>, bool)> = vec![
-        ("Energy (kcal)", Box::new(|n: &crate::api::Nutriments| n.energy_kcal_100g), false),
+        ("Energy (kcal)", Box::new(|n: &crate::api::Nutriments| n.energy_kcal_or_estimated()), false),
         ("Fat (g)", Box::new(|n| n.fat_100g), false),
         ("Carbs (g)", Box::new(|n| n.carbohydrates_100g), false),
         ("Sugars (g)", Box::new(|n| n.sugars_100g), false),
@@ -595,7 +595,7 @@ impl EnergyDensity {
 
 /// Classify energy density from nutriments.
 pub fn classify_energy_density(product: &Product) -> Option<EnergyDensity> {
-    let kcal = product.nutriments.as_ref()?.energy_kcal_100g?;
+    let kcal = product.nutriments.as_ref()?.energy_kcal_or_estimated()?;
     Some(match kcal {
         x if x < 60.0 => EnergyDensity::VeryLow,
         x if x < 150.0 => EnergyDensity::Low,
@@ -662,7 +662,7 @@ impl ProteinDensity {
 /// Returns None if energy or protein data is missing or energy is near zero.
 pub fn classify_protein_density(product: &Product) -> Option<ProteinDensity> {
     let n = product.nutriments.as_ref()?;
-    let kcal = n.energy_kcal_100g?;
+    let kcal = n.energy_kcal_or_estimated()?;
     let protein = n.proteins_100g?;
     if kcal < 1.0 {
         return None;
@@ -714,7 +714,7 @@ impl FiberDensity {
 /// Returns None if energy or fiber data is missing or energy is near zero.
 pub fn classify_fiber_density(product: &Product) -> Option<FiberDensity> {
     let n = product.nutriments.as_ref()?;
-    let kcal = n.energy_kcal_100g?;
+    let kcal = n.energy_kcal_or_estimated()?;
     let fiber = n.fiber_100g?;
     if kcal < 1.0 {
         return None;
@@ -1304,7 +1304,7 @@ impl SugarDensity {
 /// Returns None if energy or sugar data is missing or energy is near zero.
 pub fn classify_sugar_density(product: &Product) -> Option<SugarDensity> {
     let n = product.nutriments.as_ref()?;
-    let kcal = n.energy_kcal_100g?;
+    let kcal = n.energy_kcal_or_estimated()?;
     let sugar = n.sugars_100g?;
     if kcal < 1.0 {
         return None;
@@ -1434,7 +1434,7 @@ impl SatFatDensity {
 /// Returns None if energy or saturated fat data is missing or energy is near zero.
 pub fn classify_sat_fat_density(product: &Product) -> Option<SatFatDensity> {
     let n = product.nutriments.as_ref()?;
-    let kcal = n.energy_kcal_100g?;
+    let kcal = n.energy_kcal_or_estimated()?;
     let sat_fat = n.saturated_fat_100g?;
     if kcal < 1.0 {
         return None;
@@ -1564,7 +1564,7 @@ impl SaltDensity {
 /// Returns None if energy or salt data is missing or energy is near zero.
 pub fn classify_salt_density(product: &Product) -> Option<SaltDensity> {
     let n = product.nutriments.as_ref()?;
-    let kcal = n.energy_kcal_100g?;
+    let kcal = n.energy_kcal_or_estimated()?;
     let salt = n.salt_100g?;
     if kcal < 1.0 {
         return None;
@@ -1811,5 +1811,92 @@ mod allergen_tag_tests {
         let tags: Vec<String> = vec![];
         let allergens = detect_allergens(Some("water"), Some(&tags));
         assert!(allergens.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod energy_estimation_fallback_tests {
+    use super::*;
+    use crate::api::{Nutriments, Product};
+
+    /// Helper: product with macros but no explicit energy_kcal_100g.
+    fn product_macros_only(fat: f64, carbs: f64, protein: f64) -> Product {
+        Product {
+            code: "est".into(),
+            product_name: Some("Estimated".into()),
+            brands: None,
+            nutriscore_grade: Some("c".into()),
+            nova_group: Some(2),
+            additives_tags: None,
+            nutriments: Some(Nutriments {
+                energy_kcal_100g: None,
+                fat_100g: Some(fat),
+                carbohydrates_100g: Some(carbs),
+                proteins_100g: Some(protein),
+                sugars_100g: Some(5.0),
+                salt_100g: Some(0.5),
+                saturated_fat_100g: Some(fat * 0.3),
+                fiber_100g: Some(3.0),
+            }),
+            ingredients_text: None,
+            categories: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
+        }
+    }
+
+    #[test]
+    fn test_energy_density_uses_estimated_kcal() {
+        // fat=10(90) + carbs=30(120) + protein=10(40) = 250 kcal => Medium
+        let p = product_macros_only(10.0, 30.0, 10.0);
+        assert_eq!(classify_energy_density(&p), Some(EnergyDensity::Medium));
+    }
+
+    #[test]
+    fn test_protein_density_uses_estimated_kcal() {
+        // 10g protein, estimated 250 kcal => 4.0 per 100 => Low
+        let p = product_macros_only(10.0, 30.0, 10.0);
+        assert_eq!(classify_protein_density(&p), Some(ProteinDensity::Low));
+    }
+
+    #[test]
+    fn test_fiber_density_uses_estimated_kcal() {
+        // 3g fiber, estimated 250 kcal => 1.2 per 100 => Moderate
+        let p = product_macros_only(10.0, 30.0, 10.0);
+        assert_eq!(classify_fiber_density(&p), Some(FiberDensity::Moderate));
+    }
+
+    #[test]
+    fn test_sugar_density_uses_estimated_kcal() {
+        // 5g sugar, estimated 250 kcal => 2.0 per 100 => Low
+        let p = product_macros_only(10.0, 30.0, 10.0);
+        assert_eq!(classify_sugar_density(&p), Some(SugarDensity::Low));
+    }
+
+    #[test]
+    fn test_sat_fat_density_uses_estimated_kcal() {
+        // 3g sat fat, estimated 250 kcal => 1.2 per 100 => Moderate
+        let p = product_macros_only(10.0, 30.0, 10.0);
+        assert_eq!(classify_sat_fat_density(&p), Some(SatFatDensity::Moderate));
+    }
+
+    #[test]
+    fn test_salt_density_uses_estimated_kcal() {
+        // 0.5g salt, estimated 250 kcal => 0.2 per 100 => Low
+        let p = product_macros_only(10.0, 30.0, 10.0);
+        assert_eq!(classify_salt_density(&p), Some(SaltDensity::Low));
+    }
+
+    #[test]
+    fn test_compare_energy_uses_estimated_kcal() {
+        let a = product_macros_only(10.0, 30.0, 10.0); // ~250 kcal
+        let b = product_macros_only(5.0, 20.0, 5.0);   // ~145 kcal
+        let diffs = compare_products(&a, &b);
+        let row = diffs.iter().find(|r| r.label == "Energy (kcal)").unwrap();
+        assert_eq!(row.value_a, "250.0");
+        assert_eq!(row.value_b, "145.0");
+        assert_eq!(row.winner, CompareWinner::B); // lower is better
     }
 }
