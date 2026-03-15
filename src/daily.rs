@@ -814,6 +814,10 @@ pub struct DailyStats {
     pub last_date: Option<String>,
     /// Average daily calorie intake (total kcal / logged days).
     pub avg_daily_kcal: Option<f64>,
+    /// Day with highest calorie intake: (date, kcal).
+    pub peak_day: Option<(String, f64)>,
+    /// Day with lowest calorie intake: (date, kcal).
+    pub lightest_day: Option<(String, f64)>,
 }
 
 impl DailyLog {
@@ -861,12 +865,39 @@ impl DailyLog {
             None
         };
 
+        // Find peak and lightest days
+        let (peak_day, lightest_day) = if logged_days > 0 {
+            let peak: Option<(String, f64)> = self.conn.query_row(
+                "SELECT date, SUM(
+                    CASE WHEN json_extract(nutriments_json, '$.energy_kcal_100g') IS NOT NULL
+                         THEN json_extract(nutriments_json, '$.energy_kcal_100g') * servings
+                         ELSE 0.0 END
+                ) AS day_kcal FROM daily_log GROUP BY date ORDER BY day_kcal DESC LIMIT 1",
+                [],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
+            ).ok();
+            let lightest: Option<(String, f64)> = self.conn.query_row(
+                "SELECT date, SUM(
+                    CASE WHEN json_extract(nutriments_json, '$.energy_kcal_100g') IS NOT NULL
+                         THEN json_extract(nutriments_json, '$.energy_kcal_100g') * servings
+                         ELSE 0.0 END
+                ) AS day_kcal FROM daily_log GROUP BY date ORDER BY day_kcal ASC LIMIT 1",
+                [],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
+            ).ok();
+            (peak, lightest)
+        } else {
+            (None, None)
+        };
+
         Ok(DailyStats {
             total_entries,
             logged_days,
             first_date,
             last_date,
             avg_daily_kcal,
+            peak_day,
+            lightest_day,
         })
     }
 }
@@ -926,6 +957,22 @@ mod daily_stats_tests {
         // 2 days: day1 = 200*(1+2)=600, day2 = 200*1=200 → avg = 400
         let avg = stats.avg_daily_kcal.unwrap();
         assert!((avg - 400.0).abs() < 1.0, "expected ~400, got {}", avg);
+        // Peak day should be 2026-03-10 with 600 kcal
+        let (peak_date, peak_kcal) = stats.peak_day.unwrap();
+        assert_eq!(peak_date, "2026-03-10");
+        assert!((peak_kcal - 600.0).abs() < 1.0);
+        // Lightest day should be 2026-03-12 with 200 kcal
+        let (light_date, light_kcal) = stats.lightest_day.unwrap();
+        assert_eq!(light_date, "2026-03-12");
+        assert!((light_kcal - 200.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_stats_peak_lightest_empty() {
+        let log = DailyLog::open_in_memory().unwrap();
+        let stats = log.stats().unwrap();
+        assert!(stats.peak_day.is_none());
+        assert!(stats.lightest_day.is_none());
     }
 }
 

@@ -343,6 +343,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(avg) = daily_stats.avg_daily_kcal {
                     println!("Avg daily intake: {:.0} kcal/day", avg);
                 }
+                if let Some((ref date, kcal)) = daily_stats.peak_day {
+                    println!("Peak day: {} ({:.0} kcal)", date, kcal);
+                }
+                if let Some((ref date, kcal)) = daily_stats.lightest_day {
+                    println!("Lightest day: {} ({:.0} kcal)", date, kcal);
+                }
                 let streak = daily_log.streak(&today())?;
                 if streak > 0 {
                     println!("Streak: {} consecutive day(s)", streak);
