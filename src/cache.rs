@@ -390,3 +390,99 @@ mod import_tests {
         assert!(dst.get_by_code("002").unwrap().is_some());
     }
 }
+
+impl Cache {
+    /// Import multiple products in a single transaction for much better performance.
+    /// Returns (new_count, updated_count).
+    pub fn import_products(&self, products: &[Product]) -> SqlResult<(usize, usize)> {
+        let tx = self.conn.unchecked_transaction()?;
+        let mut new_count = 0usize;
+        let mut updated_count = 0usize;
+        for p in products {
+            let exists: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM products WHERE code = ?1)",
+                params![p.code],
+                |row| row.get(0),
+            )?;
+            tx.execute(
+                "INSERT OR REPLACE INTO products
+                 (code, product_name, brands, nutriscore_grade, nova_group,
+                  additives_json, nutriments_json, ingredients_text, categories, image_url, allergens_json)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                params![
+                    p.code,
+                    p.product_name,
+                    p.brands,
+                    p.nutriscore_grade,
+                    p.nova_group,
+                    serde_json::to_string(&p.additives_tags).ok(),
+                    serde_json::to_string(&p.nutriments).ok(),
+                    p.ingredients_text,
+                    p.categories,
+                    p.image_url,
+                    serde_json::to_string(&p.allergens_tags).ok(),
+                ],
+            )?;
+            if exists {
+                updated_count += 1;
+            } else {
+                new_count += 1;
+            }
+        }
+        tx.commit()?;
+        Ok((new_count, updated_count))
+    }
+}
+
+#[cfg(test)]
+mod import_bulk_tests {
+    use super::*;
+    use crate::api::Nutriments;
+
+    fn sample(code: &str, name: &str) -> Product {
+        Product {
+            code: code.to_string(),
+            product_name: Some(name.to_string()),
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: Some(Nutriments { energy_kcal_100g: Some(100.0), ..Default::default() }),
+            ingredients_text: None,
+            categories: None,
+            allergens_tags: None,
+            image_url: None,
+        }
+    }
+
+    #[test]
+    fn test_import_products_new() {
+        let cache = Cache::open_in_memory().unwrap();
+        let products = vec![sample("1", "A"), sample("2", "B")];
+        let (new_c, upd_c) = cache.import_products(&products).unwrap();
+        assert_eq!(new_c, 2);
+        assert_eq!(upd_c, 0);
+        assert_eq!(cache.count().unwrap(), 2);
+    }
+
+    #[test]
+    fn test_import_products_mixed() {
+        let cache = Cache::open_in_memory().unwrap();
+        cache.upsert(&sample("1", "Old")).unwrap();
+        let products = vec![sample("1", "Updated"), sample("2", "New")];
+        let (new_c, upd_c) = cache.import_products(&products).unwrap();
+        assert_eq!(new_c, 1);
+        assert_eq!(upd_c, 1);
+        assert_eq!(cache.count().unwrap(), 2);
+        let p = cache.get_by_code("1").unwrap().unwrap();
+        assert_eq!(p.product_name.as_deref(), Some("Updated"));
+    }
+
+    #[test]
+    fn test_import_products_empty() {
+        let cache = Cache::open_in_memory().unwrap();
+        let (new_c, upd_c) = cache.import_products(&[]).unwrap();
+        assert_eq!(new_c, 0);
+        assert_eq!(upd_c, 0);
+    }
+}

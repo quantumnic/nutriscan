@@ -373,11 +373,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Import { input } => {
             let data = std::fs::read_to_string(&input)?;
             let products: Vec<crate::api::Product> = serde_json::from_str(&data)?;
-            let count = products.len();
-            for p in &products {
-                db.upsert(p)?;
-            }
-            println!("Imported {} products from {}", count, input);
+            let (new_count, updated_count) = db.import_products(&products)?;
+            println!("Imported {} products from {} ({} new, {} updated)", new_count + updated_count, input, new_count, updated_count);
         }
         Commands::Purge { days } => {
             let evicted = db.evict_stale(days)?;
