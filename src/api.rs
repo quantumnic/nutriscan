@@ -181,3 +181,10 @@ mod tests {
         assert!(n.energy_kcal_100g.is_none());
     }
 }
+
+impl Product {
+    /// Return the product name for display, falling back to "Unknown".
+    pub fn display_name(&self) -> &str {
+        self.product_name.as_deref().unwrap_or("Unknown")
+    }
+}

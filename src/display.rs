@@ -123,8 +123,8 @@ pub fn print_warnings(warnings: &[AdditiveWarning], product_name: &str) {
 pub fn print_comparison(a: &Product, b: &Product, diffs: &[CompareRow]) {
     use crate::analyzer::CompareWinner;
 
-    let name_a = a.product_name.as_deref().unwrap_or("Product A");
-    let name_b = b.product_name.as_deref().unwrap_or("Product B");
+    let name_a = a.display_name();
+    let name_b = b.display_name();
 
     println!();
     println!("{}", "═══ Product Comparison ═══".bold().cyan());

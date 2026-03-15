@@ -357,7 +357,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("Last {} cached product(s):", products.len());
                 for (i, p) in products.iter().enumerate() {
-                    let name = p.product_name.as_deref().unwrap_or("Unknown");
+                    let name = p.display_name();
                     let brand = p.brands.as_deref().unwrap_or("");
                     let grade = p.nutriscore_grade.as_deref().unwrap_or("?");
                     println!("  {}. {} ({}) — Nutri-Score {}", i + 1, name, brand, grade.to_uppercase());
@@ -388,7 +388,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Some(d) => validate_date(&d)?,
                         None => today(),
                     };
-                    let name = p.product_name.clone().unwrap_or_else(|| "Unknown".into());
+                    let name = p.display_name();
                     daily_log.log_product(&date, &p, servings)?;
                     db.upsert(&p)?;
                     println!("✅ Logged {:.1}× {} for {}", servings, name, date);

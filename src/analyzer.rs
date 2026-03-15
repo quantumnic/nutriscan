@@ -350,7 +350,7 @@ pub fn analyze(product: &Product) -> Analysis {
     let categories = parse_categories(product.categories.as_deref());
 
     Analysis {
-        product_name: product.product_name.clone().unwrap_or_else(|| "Unknown".into()),
+        product_name: product.display_name().to_string(),
         brands: product.brands.clone().unwrap_or_else(|| "Unknown".into()),
         nutri_rating,
         nova,

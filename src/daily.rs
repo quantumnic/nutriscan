@@ -119,7 +119,7 @@ impl DailyLog {
 
     /// Log a product with a given number of servings for today.
     pub fn log_product(&self, date: &str, product: &Product, servings: f64) -> SqlResult<()> {
-        let name = product.product_name.as_deref().unwrap_or("Unknown");
+        let name = product.display_name();
         let nutriments_json = serde_json::to_string(&product.nutriments).ok();
         self.conn.execute(
             "INSERT INTO daily_log (date, code, product_name, servings, nutriments_json)
