@@ -40,6 +40,8 @@ impl Cache {
             categories: row.get(8)?,
             allergens_tags: allergens_json.and_then(|s| serde_json::from_str(&s).ok()),
             image_url: row.get(9)?,
+            quantity: row.get(11).ok().flatten(),
+            serving_size: row.get(12).ok().flatten(),
         })
     }
 
@@ -57,6 +59,8 @@ impl Cache {
                 categories TEXT,
                 image_url TEXT,
                 allergens_json TEXT,
+                quantity TEXT,
+                serving_size TEXT,
                 updated_at TEXT DEFAULT (datetime('now'))
             );
             CREATE INDEX IF NOT EXISTS idx_product_name ON products(product_name);",
@@ -67,8 +71,8 @@ impl Cache {
         self.conn.execute(
             "INSERT OR REPLACE INTO products
              (code, product_name, brands, nutriscore_grade, nova_group,
-              additives_json, nutriments_json, ingredients_text, categories, image_url, allergens_json)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+              additives_json, nutriments_json, ingredients_text, categories, image_url, allergens_json, quantity, serving_size)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
                 p.code,
                 p.product_name,
@@ -81,6 +85,8 @@ impl Cache {
                 p.categories,
                 p.image_url,
                 serde_json::to_string(&p.allergens_tags).ok(),
+                p.quantity,
+                p.serving_size,
             ],
         )?;
         Ok(())
@@ -91,7 +97,7 @@ impl Cache {
         let mut stmt = self.conn.prepare(
             "SELECT code, product_name, brands, nutriscore_grade, nova_group,
                     additives_json, nutriments_json, ingredients_text, categories, image_url,
-                    allergens_json
+                    allergens_json, quantity, serving_size
              FROM products
              WHERE product_name LIKE ?1 OR brands LIKE ?1 OR categories LIKE ?1
              LIMIT 20",
@@ -111,7 +117,7 @@ impl Cache {
         let mut stmt = self.conn.prepare(
             "SELECT code, product_name, brands, nutriscore_grade, nova_group,
                     additives_json, nutriments_json, ingredients_text, categories, image_url,
-                    allergens_json
+                    allergens_json, quantity, serving_size
              FROM products WHERE code = ?1",
         )?;
         let rows = stmt.query_map(params![code], Self::row_to_product)?;
@@ -153,7 +159,7 @@ impl Cache {
         let mut stmt = self.conn.prepare(
             "SELECT code, product_name, brands, nutriscore_grade, nova_group,
                     additives_json, nutriments_json, ingredients_text, categories, image_url,
-                    allergens_json
+                    allergens_json, quantity, serving_size
              FROM products ORDER BY updated_at DESC LIMIT ?1",
         )?;
         let rows = stmt.query_map(params![limit], Self::row_to_product)?;
@@ -203,6 +209,8 @@ mod tests {
             categories: Some("beverages".to_string()),
             allergens_tags: None,
             image_url: None,
+            quantity: None,
+            serving_size: None,
         }
     }
 
@@ -367,6 +375,8 @@ mod import_tests {
             categories: None,
             allergens_tags: None,
             image_url: None,
+            quantity: None,
+            serving_size: None,
         }
     }
 
@@ -407,8 +417,8 @@ impl Cache {
             tx.execute(
                 "INSERT OR REPLACE INTO products
                  (code, product_name, brands, nutriscore_grade, nova_group,
-                  additives_json, nutriments_json, ingredients_text, categories, image_url, allergens_json)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                  additives_json, nutriments_json, ingredients_text, categories, image_url, allergens_json, quantity, serving_size)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
                 params![
                     p.code,
                     p.product_name,
@@ -421,6 +431,8 @@ impl Cache {
                     p.categories,
                     p.image_url,
                     serde_json::to_string(&p.allergens_tags).ok(),
+                p.quantity,
+                p.serving_size,
                 ],
             )?;
             if exists {
@@ -452,6 +464,8 @@ mod import_bulk_tests {
             categories: None,
             allergens_tags: None,
             image_url: None,
+            quantity: None,
+            serving_size: None,
         }
     }
 

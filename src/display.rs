@@ -5,6 +5,15 @@ use colored::*;
 pub fn print_analysis(a: &Analysis) {
     println!();
     println!("{}", format!("═══ {} ═══", a.product_name).bold().cyan());
+    if let Some(ref qty) = a.product.quantity {
+        print!("  Quantity: {}", qty);
+        if let Some(ref srv) = a.product.serving_size {
+            print!("  (serving: {})", srv);
+        }
+        println!();
+    } else if let Some(ref srv) = a.product.serving_size {
+        println!("  Serving size: {}", srv);
+    }
     if a.brands != "Unknown" {
         println!("  Brand: {}", a.brands);
     }

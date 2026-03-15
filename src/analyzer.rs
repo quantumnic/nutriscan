@@ -754,7 +754,7 @@ mod tests {
             }),
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None,
+            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         }
     }
 
@@ -835,7 +835,7 @@ mod tests {
             nutriments: None,
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None,
+            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         };
         assert!(health_score(&p).is_none());
     }
@@ -990,7 +990,7 @@ mod tests {
         let p = Product {
             code: "1".into(), product_name: None, brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         };
         assert_eq!(assess_macro_balance(&p), MacroBalance::Unknown);
     }
@@ -1008,7 +1008,7 @@ mod tests {
         let b = Product {
             code: "2".into(), product_name: Some("Empty".into()), brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         };
         let diffs = compare_products(&a, &b);
         for row in &diffs {
@@ -1135,7 +1135,7 @@ mod tests {
         let p = Product {
             code: "1".into(), product_name: None, brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         };
         assert_eq!(classify_energy_density(&p), None);
     }
@@ -1338,7 +1338,7 @@ mod sugar_density_tests {
             }),
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None,
+            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         }
     }
 
@@ -1375,7 +1375,7 @@ mod sugar_density_tests {
         let p = Product {
             code: "1".into(), product_name: None, brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         };
         assert_eq!(classify_sugar_density(&p), None);
     }
@@ -1468,7 +1468,7 @@ mod sat_fat_density_tests {
             }),
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None,
+            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         }
     }
 
@@ -1505,7 +1505,7 @@ mod sat_fat_density_tests {
         let p = Product {
             code: "1".into(), product_name: None, brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         };
         assert_eq!(classify_sat_fat_density(&p), None);
     }
@@ -1598,7 +1598,7 @@ mod salt_density_tests {
             }),
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None,
+            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         }
     }
 
@@ -1635,7 +1635,7 @@ mod salt_density_tests {
         let p = Product {
             code: "1".into(), product_name: None, brands: None,
             nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
+            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         };
         assert_eq!(classify_salt_density(&p), None);
     }

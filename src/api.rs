@@ -17,6 +17,10 @@ pub struct Product {
     pub categories: Option<String>,
     pub allergens_tags: Option<Vec<String>>,
     pub image_url: Option<String>,
+    #[serde(default)]
+    pub quantity: Option<String>,
+    #[serde(default)]
+    pub serving_size: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -166,7 +170,9 @@ mod tests {
             "ingredients_text": "water",
             "allergens_tags": ["en:milk"],
             "categories": "beverages",
-            "image_url": null
+            "image_url": null,
+            "quantity": "500g",
+            "serving_size": "30g"
         }"#;
         let p: Product = serde_json::from_str(json).unwrap();
         assert_eq!(p.code, "123");

@@ -238,7 +238,7 @@ mod tests {
             }),
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None,
+            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         }
     }
 
@@ -320,7 +320,7 @@ mod tests {
             product_name: Some("Mystery".to_string()),
             brands: None, nutriscore_grade: None, nova_group: None,
             additives_tags: None, nutriments: None, ingredients_text: None,
-            categories: None, allergens_tags: None, image_url: None,
+            categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         };
         log.log_product("2026-03-04", &p, 1.0).unwrap();
         let s = log.summary("2026-03-04").unwrap();
@@ -371,7 +371,7 @@ mod sat_fat_tests {
             }),
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None,
+            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         };
         log.log_product("2026-03-04", &p, 2.0).unwrap();
         let s = log.summary("2026-03-04").unwrap();
@@ -603,7 +603,7 @@ mod undo_tests {
                 salt_100g: Some(0.5), proteins_100g: Some(3.0),
                 fiber_100g: Some(2.0), carbohydrates_100g: Some(20.0),
             }),
-            ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
+            ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         }
     }
 
@@ -642,7 +642,7 @@ mod top_contributor_tests {
                 salt_100g: Some(0.5), proteins_100g: Some(3.0),
                 fiber_100g: Some(2.0), carbohydrates_100g: Some(20.0),
             }),
-            ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
+            ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         }
     }
 
@@ -745,7 +745,7 @@ mod streak_tests {
                 salt_100g: Some(0.5), proteins_100g: Some(3.0),
                 fiber_100g: Some(2.0), carbohydrates_100g: Some(20.0),
             }),
-            ingredients_text: None, categories: None, allergens_tags: None, image_url: None,
+            ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         }
     }
 
@@ -871,7 +871,7 @@ mod daily_stats_tests {
             additives_tags: None,
             code: String::new(),
             categories: None,
-            allergens_tags: None, image_url: None,
+            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
         }
     }
 
@@ -955,7 +955,7 @@ mod top_products_tests {
             categories: None,
             additives_tags: None,
             allergens_tags: None,
-            image_url: None,
+            image_url: None, quantity: None, serving_size: None,
         }
     }
 
