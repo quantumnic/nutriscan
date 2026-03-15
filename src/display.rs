@@ -253,7 +253,7 @@ mod tests {
 
 pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary, streak: u32) {
     println!();
-    println!("{}", format!("═══ Daily Intake: {} ═══", date).bold().cyan());
+    println!("{}", format!("═══ Daily Intake: {} ({}) ═══", date, crate::weekday_label(date)).bold().cyan());
 
     if summary.entries.is_empty() {
         println!("  No products logged for this day.");
@@ -325,7 +325,7 @@ pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary, str
 
 pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily::DailySummary)], streak: u32) {
     println!();
-    println!("{}", format!("═══ Weekly Summary: {} → {} ═══", from, to).bold().cyan());
+    println!("{}", format!("═══ Weekly Summary: {} ({}) → {} ({}) ═══", from, crate::weekday_label(from), to, crate::weekday_label(to)).bold().cyan());
 
     if days.is_empty() {
         println!("  No products logged in this period.");

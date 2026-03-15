@@ -647,3 +647,47 @@ mod barcode_detection_tests {
         assert!(!looks_like_barcode("Nutella")); // clearly a name
     }
 }
+
+/// Return the day-of-week name for a YYYY-MM-DD date string.
+pub fn weekday_label(date: &str) -> &'static str {
+    let parts: Vec<u64> = date.split('-').filter_map(|s| s.parse().ok()).collect();
+    if parts.len() != 3 {
+        return "";
+    }
+    let days = ymd_to_days(parts[0], parts[1], parts[2]);
+    // 1970-01-01 was a Thursday (day index 4)
+    let dow = (days + 3) % 7; // 0=Mon, 1=Tue, ..., 6=Sun
+    match dow {
+        0 => "Mon",
+        1 => "Tue",
+        2 => "Wed",
+        3 => "Thu",
+        4 => "Fri",
+        5 => "Sat",
+        6 => "Sun",
+        _ => "",
+    }
+}
+
+#[cfg(test)]
+mod weekday_tests {
+    use super::*;
+
+    #[test]
+    fn test_weekday_known_dates() {
+        // 1970-01-01 was a Thursday
+        assert_eq!(weekday_label("1970-01-01"), "Thu");
+        // 2026-03-16 is a Monday
+        assert_eq!(weekday_label("2026-03-16"), "Mon");
+        // 2026-03-15 is a Sunday
+        assert_eq!(weekday_label("2026-03-15"), "Sun");
+        // 2024-12-25 was a Wednesday
+        assert_eq!(weekday_label("2024-12-25"), "Wed");
+    }
+
+    #[test]
+    fn test_weekday_invalid_date() {
+        assert_eq!(weekday_label("not-a-date"), "");
+        assert_eq!(weekday_label(""), "");
+    }
+}
