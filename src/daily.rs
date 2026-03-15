@@ -155,7 +155,7 @@ impl DailyLog {
         for row in rows {
             let (entry, nutriments, servings) = row?;
             if let Some(n) = nutriments {
-                summary.total_kcal += n.energy_kcal_100g.unwrap_or(0.0) * servings;
+                summary.total_kcal += n.energy_kcal_or_estimated().unwrap_or(0.0) * servings;
                 summary.total_fat += n.fat_100g.unwrap_or(0.0) * servings;
                 summary.total_carbs += n.carbohydrates_100g.unwrap_or(0.0) * servings;
                 summary.total_protein += n.proteins_100g.unwrap_or(0.0) * servings;
@@ -163,7 +163,7 @@ impl DailyLog {
                 summary.total_salt += n.salt_100g.unwrap_or(0.0) * servings;
                 summary.total_fiber += n.fiber_100g.unwrap_or(0.0) * servings;
                 summary.total_saturated_fat += n.saturated_fat_100g.unwrap_or(0.0) * servings;
-                let entry_kcal = n.energy_kcal_100g.unwrap_or(0.0) * servings;
+                let entry_kcal = n.energy_kcal_or_estimated().unwrap_or(0.0) * servings;
                 match &summary.top_kcal_entry {
                     Some((_, best)) if entry_kcal <= *best => {}
                     _ => { summary.top_kcal_entry = Some((entry.product_name.clone(), entry_kcal)); }

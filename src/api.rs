@@ -194,3 +194,72 @@ impl Product {
         self.product_name.as_deref().unwrap_or("Unknown")
     }
 }
+
+impl Nutriments {
+    /// Return energy_kcal_100g if present, otherwise estimate from macros:
+    /// fat × 9 + carbs × 4 + protein × 4 (kcal/g).
+    /// Returns None only when kcal AND all three macros are missing.
+    pub fn energy_kcal_or_estimated(&self) -> Option<f64> {
+        if let Some(kcal) = self.energy_kcal_100g {
+            return Some(kcal);
+        }
+        let fat = self.fat_100g;
+        let carbs = self.carbohydrates_100g;
+        let protein = self.proteins_100g;
+        if fat.is_none() && carbs.is_none() && protein.is_none() {
+            return None;
+        }
+        Some(
+            fat.unwrap_or(0.0) * 9.0
+                + carbs.unwrap_or(0.0) * 4.0
+                + protein.unwrap_or(0.0) * 4.0,
+        )
+    }
+}
+
+#[cfg(test)]
+mod energy_estimation_tests {
+    use super::*;
+
+    #[test]
+    fn test_energy_kcal_or_estimated_prefers_explicit() {
+        let n = Nutriments {
+            energy_kcal_100g: Some(250.0),
+            fat_100g: Some(10.0),
+            carbohydrates_100g: Some(30.0),
+            proteins_100g: Some(5.0),
+            ..Default::default()
+        };
+        assert_eq!(n.energy_kcal_or_estimated(), Some(250.0));
+    }
+
+    #[test]
+    fn test_energy_kcal_or_estimated_from_macros() {
+        let n = Nutriments {
+            energy_kcal_100g: None,
+            fat_100g: Some(10.0),        // 90 kcal
+            carbohydrates_100g: Some(20.0), // 80 kcal
+            proteins_100g: Some(5.0),    // 20 kcal
+            ..Default::default()
+        };
+        assert_eq!(n.energy_kcal_or_estimated(), Some(190.0));
+    }
+
+    #[test]
+    fn test_energy_kcal_or_estimated_partial_macros() {
+        let n = Nutriments {
+            energy_kcal_100g: None,
+            fat_100g: None,
+            carbohydrates_100g: Some(50.0), // 200 kcal
+            proteins_100g: None,
+            ..Default::default()
+        };
+        assert_eq!(n.energy_kcal_or_estimated(), Some(200.0));
+    }
+
+    #[test]
+    fn test_energy_kcal_or_estimated_all_none() {
+        let n = Nutriments::default();
+        assert_eq!(n.energy_kcal_or_estimated(), None);
+    }
+}
