@@ -812,6 +812,8 @@ pub struct DailyStats {
     pub first_date: Option<String>,
     /// Latest logged date (YYYY-MM-DD), if any.
     pub last_date: Option<String>,
+    /// Average daily calorie intake (total kcal / logged days).
+    pub avg_daily_kcal: Option<f64>,
 }
 
 impl DailyLog {
@@ -837,11 +839,34 @@ impl DailyLog {
             [],
             |row| row.get(0),
         )?;
+        // Compute average daily kcal across logged days
+        let avg_daily_kcal: Option<f64> = if logged_days > 0 {
+            // Sum per-day totals, then average
+            let total_kcal: f64 = self.conn.query_row(
+                "SELECT COALESCE(SUM(day_kcal), 0.0) FROM (
+                    SELECT date, SUM(
+                        CASE
+                            WHEN json_extract(nutriments_json, '$.energy_kcal_100g') IS NOT NULL
+                                THEN json_extract(nutriments_json, '$.energy_kcal_100g') * servings
+                            ELSE 0.0
+                        END
+                    ) AS day_kcal
+                    FROM daily_log GROUP BY date
+                )",
+                [],
+                |row| row.get(0),
+            )?;
+            Some(total_kcal / logged_days as f64)
+        } else {
+            None
+        };
+
         Ok(DailyStats {
             total_entries,
             logged_days,
             first_date,
             last_date,
+            avg_daily_kcal,
         })
     }
 }
@@ -883,6 +908,7 @@ mod daily_stats_tests {
         assert_eq!(stats.logged_days, 0);
         assert!(stats.first_date.is_none());
         assert!(stats.last_date.is_none());
+        assert!(stats.avg_daily_kcal.is_none());
     }
 
     #[test]
@@ -897,6 +923,9 @@ mod daily_stats_tests {
         assert_eq!(stats.logged_days, 2);
         assert_eq!(stats.first_date.as_deref(), Some("2026-03-10"));
         assert_eq!(stats.last_date.as_deref(), Some("2026-03-12"));
+        // 2 days: day1 = 200*(1+2)=600, day2 = 200*1=200 → avg = 400
+        let avg = stats.avg_daily_kcal.unwrap();
+        assert!((avg - 400.0).abs() < 1.0, "expected ~400, got {}", avg);
     }
 }
 
