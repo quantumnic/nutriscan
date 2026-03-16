@@ -500,3 +500,65 @@ mod import_bulk_tests {
         assert_eq!(upd_c, 0);
     }
 }
+
+/// A product paired with its cache timestamp.
+#[derive(Debug)]
+pub struct RecentProduct {
+    pub product: Product,
+    pub updated_at: String,
+}
+
+impl Cache {
+    /// Like `recent()` but also returns the `updated_at` timestamp.
+    pub fn recent_with_dates(&self, limit: u32) -> SqlResult<Vec<RecentProduct>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT code, product_name, brands, nutriscore_grade, nova_group,
+                    additives_json, nutriments_json, ingredients_text, categories, image_url,
+                    allergens_json, quantity, serving_size, updated_at
+             FROM products ORDER BY updated_at DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit], |row| {
+            let product = Self::row_to_product(row)?;
+            let updated_at: String = row.get(13)?;
+            Ok(RecentProduct { product, updated_at })
+        })?;
+        rows.collect()
+    }
+}
+
+#[cfg(test)]
+mod recent_with_dates_tests {
+    use super::*;
+
+    #[test]
+    fn test_recent_with_dates_returns_timestamps() {
+        let cache = Cache::open_in_memory().unwrap();
+        let product = Product {
+            code: "123".to_string(),
+            product_name: Some("Test".to_string()),
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: None,
+            ingredients_text: None,
+            categories: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
+        };
+        cache.upsert(&product).unwrap();
+        let recent = cache.recent_with_dates(5).unwrap();
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].product.code, "123");
+        assert!(!recent[0].updated_at.is_empty());
+    }
+
+    #[test]
+    fn test_recent_with_dates_empty() {
+        let cache = Cache::open_in_memory().unwrap();
+        let recent = cache.recent_with_dates(5).unwrap();
+        assert!(recent.is_empty());
+    }
+}

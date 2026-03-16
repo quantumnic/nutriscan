@@ -360,16 +360,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Commands::History { limit } => {
-            let products = db.recent(limit)?;
-            if products.is_empty() {
+            let recent = db.recent_with_dates(limit)?;
+            if recent.is_empty() {
                 println!("No cached products yet. Use 'scan' or 'update' to populate.");
             } else {
-                println!("Last {} cached product(s):", products.len());
-                for (i, p) in products.iter().enumerate() {
+                println!("Last {} cached product(s):", recent.len());
+                for (i, rp) in recent.iter().enumerate() {
+                    let p = &rp.product;
                     let name = p.display_name();
                     let brand = p.brands.as_deref().unwrap_or("");
                     let grade = p.nutriscore_grade.as_deref().unwrap_or("?");
-                    println!("  {}. {} ({}) — Nutri-Score {}", i + 1, name, brand, grade.to_uppercase());
+                    // Show date portion of the cached timestamp
+                    let cached = if rp.updated_at.len() >= 10 { &rp.updated_at[..10] } else { &rp.updated_at };
+                    println!("  {}. {} ({}) — Nutri-Score {} [cached: {}]", i + 1, name, brand, grade.to_uppercase(), cached);
                 }
             }
         }
