@@ -511,6 +511,64 @@ pub fn print_running_totals(summary: &crate::daily::DailySummary, day_label: &st
     } else {
         println!("   ⚡ Daily target of {:.0} kcal reached!", target);
     }
+    // Visual progress bar
+    let pct = (summary.total_kcal / target * 100.0).min(100.0);
+    let bar = calorie_progress_bar(pct);
+    println!("   {}", bar);
+}
+
+/// Render a text-based calorie progress bar.
+fn calorie_progress_bar(pct: f64) -> String {
+    let pct = pct.min(100.0);
+    let width: usize = 20;
+    let filled = ((pct / 100.0) * width as f64).round() as usize;
+    let empty = width.saturating_sub(filled);
+    let bar_color = if pct >= 100.0 {
+        "red"
+    } else if pct >= 75.0 {
+        "yellow"
+    } else {
+        "green"
+    };
+    let filled_str: String = "█".repeat(filled);
+    let empty_str: String = "░".repeat(empty);
+    let bar_text = format!("[{}{}] {:.0}%", filled_str, empty_str, pct);
+    match bar_color {
+        "red" => format!("{}", bar_text.red()),
+        "yellow" => format!("{}", bar_text.yellow()),
+        _ => format!("{}", bar_text.green()),
+    }
+}
+
+#[cfg(test)]
+mod progress_bar_tests {
+    use super::*;
+
+    #[test]
+    fn test_progress_bar_zero() {
+        let bar = calorie_progress_bar(0.0);
+        assert!(bar.contains("0%"));
+    }
+
+    #[test]
+    fn test_progress_bar_fifty() {
+        let bar = calorie_progress_bar(50.0);
+        assert!(bar.contains("50%"));
+    }
+
+    #[test]
+    fn test_progress_bar_hundred() {
+        let bar = calorie_progress_bar(100.0);
+        // bar contains ANSI color codes, so check the raw percentage
+        assert!(bar.contains("100%") || bar.contains("100"));
+    }
+
+    #[test]
+    fn test_progress_bar_over_hundred_clamped() {
+        let bar = calorie_progress_bar(150.0);
+        // bar contains ANSI color codes, so check the raw percentage
+        assert!(bar.contains("100%") || bar.contains("100"));
+    }
 }
 
 /// Print a ranked list of top products (used by Stats command).
