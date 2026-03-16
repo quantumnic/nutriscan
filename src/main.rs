@@ -344,10 +344,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Avg daily intake: {:.0} kcal/day", avg);
                 }
                 if let Some((ref date, kcal)) = daily_stats.peak_day {
-                    println!("Peak day: {} ({:.0} kcal)", date, kcal);
+                    println!("Peak day: {} ({}) — {:.0} kcal", date, crate::weekday_label(date), kcal);
                 }
                 if let Some((ref date, kcal)) = daily_stats.lightest_day {
-                    println!("Lightest day: {} ({:.0} kcal)", date, kcal);
+                    println!("Lightest day: {} ({}) — {:.0} kcal", date, crate::weekday_label(date), kcal);
                 }
                 let streak = daily_log.streak(&today())?;
                 if streak > 0 {
@@ -372,7 +372,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let grade = p.nutriscore_grade.as_deref().unwrap_or("?");
                     // Show date portion of the cached timestamp
                     let cached = if rp.updated_at.len() >= 10 { &rp.updated_at[..10] } else { &rp.updated_at };
-                    println!("  {}. {} ({}) — Nutri-Score {} [cached: {}]", i + 1, name, brand, grade.to_uppercase(), cached);
+                    println!("  {}. {} ({}) — Nutri-Score {} [cached: {} ({})]", i + 1, name, brand, grade.to_uppercase(), cached, crate::weekday_label(cached));
                 }
             }
         }
