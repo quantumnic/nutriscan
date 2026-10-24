@@ -5,21 +5,48 @@ use std::sync::LazyLock;
 /// Known problematic additives with risk descriptions.
 static ADDITIVE_WARNINGS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
     HashMap::from([
-        ("en:e150d", "Caramel color (sulfite ammonia) — potentially carcinogenic"),
-        ("en:e950", "Acesulfame K — artificial sweetener, controversial"),
+        (
+            "en:e150d",
+            "Caramel color (sulfite ammonia) — potentially carcinogenic",
+        ),
+        (
+            "en:e950",
+            "Acesulfame K — artificial sweetener, controversial",
+        ),
         ("en:e951", "Aspartame — artificial sweetener, controversial"),
-        ("en:e621", "Monosodium glutamate — flavor enhancer, may cause headaches"),
+        (
+            "en:e621",
+            "Monosodium glutamate — flavor enhancer, may cause headaches",
+        ),
         ("en:e102", "Tartrazine — azo dye, may cause hyperactivity"),
-        ("en:e110", "Sunset Yellow — azo dye, may cause hyperactivity"),
+        (
+            "en:e110",
+            "Sunset Yellow — azo dye, may cause hyperactivity",
+        ),
         ("en:e122", "Azorubine — azo dye, may cause hyperactivity"),
-        ("en:e211", "Sodium benzoate — preservative, may form benzene with vitamin C"),
-        ("en:e250", "Sodium nitrite — preservative, potentially carcinogenic"),
+        (
+            "en:e211",
+            "Sodium benzoate — preservative, may form benzene with vitamin C",
+        ),
+        (
+            "en:e250",
+            "Sodium nitrite — preservative, potentially carcinogenic",
+        ),
         ("en:e320", "BHA — antioxidant, possible endocrine disruptor"),
-        ("en:e171", "Titanium dioxide — banned in EU as food additive"),
+        (
+            "en:e171",
+            "Titanium dioxide — banned in EU as food additive",
+        ),
         ("en:e133", "Brilliant Blue — synthetic dye, limited studies"),
         ("en:e129", "Allura Red — azo dye, may cause hyperactivity"),
-        ("en:e952", "Cyclamate — artificial sweetener, banned in some countries"),
-        ("en:e955", "Sucralose — artificial sweetener, may affect gut microbiome"),
+        (
+            "en:e952",
+            "Cyclamate — artificial sweetener, banned in some countries",
+        ),
+        (
+            "en:e955",
+            "Sucralose — artificial sweetener, may affect gut microbiome",
+        ),
     ])
 });
 
@@ -54,7 +81,10 @@ const ALLERGEN_KEYWORDS: &[(&str, &str)] = &[
 ];
 
 /// Detect potential allergens from ingredients text.
-pub fn detect_allergens(ingredients: Option<&str>, allergen_tags: Option<&[String]>) -> Vec<String> {
+pub fn detect_allergens(
+    ingredients: Option<&str>,
+    allergen_tags: Option<&[String]>,
+) -> Vec<String> {
     let mut found: Vec<String> = if let Some(text) = ingredients {
         let lower = text.to_lowercase();
         ALLERGEN_KEYWORDS
@@ -114,33 +144,50 @@ pub fn health_score(product: &Product) -> Option<u32> {
     if let Some(ref n) = product.nutriments {
         if let Some(sugar) = n.sugars_100g {
             has_data = true;
-            if sugar > 20.0 { score -= 5.0; }
-            else if sugar < 5.0 { score += 3.0; }
+            if sugar > 20.0 {
+                score -= 5.0;
+            } else if sugar < 5.0 {
+                score += 3.0;
+            }
         }
         if let Some(salt) = n.salt_100g {
             has_data = true;
-            if salt > 1.5 { score -= 5.0; }
-            else if salt < 0.3 { score += 2.0; }
+            if salt > 1.5 {
+                score -= 5.0;
+            } else if salt < 0.3 {
+                score += 2.0;
+            }
         }
         if let Some(fiber) = n.fiber_100g {
             has_data = true;
-            if fiber > 5.0 { score += 5.0; }
-            else if fiber > 3.0 { score += 2.0; }
+            if fiber > 5.0 {
+                score += 5.0;
+            } else if fiber > 3.0 {
+                score += 2.0;
+            }
         }
         if let Some(protein) = n.proteins_100g {
             has_data = true;
-            if protein > 10.0 { score += 3.0; }
+            if protein > 10.0 {
+                score += 3.0;
+            }
         }
         if let Some(sat_fat) = n.saturated_fat_100g {
             has_data = true;
-            if sat_fat > 5.0 { score -= 5.0; }
-            else if sat_fat < 1.0 { score += 2.0; }
+            if sat_fat > 5.0 {
+                score -= 5.0;
+            } else if sat_fat < 1.0 {
+                score += 2.0;
+            }
         }
     }
 
     if let Some(ref tags) = product.additives_tags {
         let known = &*ADDITIVE_WARNINGS;
-        let bad_count = tags.iter().filter(|t| known.contains_key(t.as_str())).count();
+        let bad_count = tags
+            .iter()
+            .filter(|t| known.contains_key(t.as_str()))
+            .count();
         if bad_count > 0 {
             has_data = true;
             score -= (bad_count as f64) * 3.0;
@@ -336,7 +383,10 @@ pub fn analyze(product: &Product) -> Analysis {
         })
         .unwrap_or_default();
 
-    let allergens = detect_allergens(product.ingredients_text.as_deref(), product.allergens_tags.as_deref());
+    let allergens = detect_allergens(
+        product.ingredients_text.as_deref(),
+        product.allergens_tags.as_deref(),
+    );
     let score = health_score(product);
 
     let macro_balance = assess_macro_balance(product);
@@ -382,7 +432,6 @@ pub enum CompareWinner {
     Tie,
 }
 
-
 /// A single row in a product comparison table.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompareRow {
@@ -398,11 +447,15 @@ pub struct CompareRow {
 
 pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
     let mut diffs = Vec::new();
-        // Nutri-Score comparison (A > B > C > D > E, so lower ordinal is better)
+    // Nutri-Score comparison (A > B > C > D > E, so lower ordinal is better)
     let grade_to_ord = |g: &str| -> Option<u8> {
         match g.to_lowercase().as_str() {
-            "a" => Some(1), "b" => Some(2), "c" => Some(3),
-            "d" => Some(4), "e" => Some(5), _ => None,
+            "a" => Some(1),
+            "b" => Some(2),
+            "c" => Some(3),
+            "d" => Some(4),
+            "e" => Some(5),
+            _ => None,
         }
     };
     let ns_a = a.nutriscore_grade.as_deref().and_then(grade_to_ord);
@@ -429,8 +482,14 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
     };
     diffs.push(CompareRow {
         label: "NOVA Group".to_string(),
-        value_a: a.nova_group.map(|v| v.to_string()).unwrap_or_else(|| "?".into()),
-        value_b: b.nova_group.map(|v| v.to_string()).unwrap_or_else(|| "?".into()),
+        value_a: a
+            .nova_group
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "?".into()),
+        value_b: b
+            .nova_group
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "?".into()),
         winner: nv_winner,
     });
 
@@ -439,8 +498,16 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
 
     // (label, getter, higher_is_better)
     #[allow(clippy::type_complexity)]
-    let fields: Vec<(&str, Box<dyn Fn(&crate::api::Nutriments) -> Option<f64>>, bool)> = vec![
-        ("Energy (kcal)", Box::new(|n: &crate::api::Nutriments| n.energy_kcal_or_estimated()), false),
+    let fields: Vec<(
+        &str,
+        Box<dyn Fn(&crate::api::Nutriments) -> Option<f64>>,
+        bool,
+    )> = vec![
+        (
+            "Energy (kcal)",
+            Box::new(|n: &crate::api::Nutriments| n.energy_kcal_or_estimated()),
+            false,
+        ),
         ("Fat (g)", Box::new(|n| n.fat_100g), false),
         ("Carbs (g)", Box::new(|n| n.carbohydrates_100g), false),
         ("Sugars (g)", Box::new(|n| n.sugars_100g), false),
@@ -472,8 +539,12 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
         };
         diffs.push(CompareRow {
             label: label.to_string(),
-            value_a: va.map(|v| format!("{:.1}", v)).unwrap_or_else(|| "—".into()),
-            value_b: vb.map(|v| format!("{:.1}", v)).unwrap_or_else(|| "—".into()),
+            value_a: va
+                .map(|v| format!("{:.1}", v))
+                .unwrap_or_else(|| "—".into()),
+            value_b: vb
+                .map(|v| format!("{:.1}", v))
+                .unwrap_or_else(|| "—".into()),
             winner,
         });
     }
@@ -489,8 +560,12 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
     };
     diffs.push(CompareRow {
         label: "Health Score".to_string(),
-        value_a: score_a.map(|v| format!("{}/100", v)).unwrap_or_else(|| "—".into()),
-        value_b: score_b.map(|v| format!("{}/100", v)).unwrap_or_else(|| "—".into()),
+        value_a: score_a
+            .map(|v| format!("{}/100", v))
+            .unwrap_or_else(|| "—".into()),
+        value_b: score_b
+            .map(|v| format!("{}/100", v))
+            .unwrap_or_else(|| "—".into()),
         winner: hs_winner,
     });
 
@@ -511,8 +586,14 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
     });
 
     // Allergen count comparison (fewer is better)
-    let al_a = Some(detect_allergens(a.ingredients_text.as_deref(), a.allergens_tags.as_deref()));
-    let al_b = Some(detect_allergens(b.ingredients_text.as_deref(), b.allergens_tags.as_deref()));
+    let al_a = Some(detect_allergens(
+        a.ingredients_text.as_deref(),
+        a.allergens_tags.as_deref(),
+    ));
+    let al_b = Some(detect_allergens(
+        b.ingredients_text.as_deref(),
+        b.allergens_tags.as_deref(),
+    ));
     let al_winner = match (&al_a, &al_b) {
         (Some(a_list), Some(b_list)) if a_list.len() < b_list.len() => CompareWinner::A,
         (Some(a_list), Some(b_list)) if b_list.len() < a_list.len() => CompareWinner::B,
@@ -521,8 +602,12 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
     };
     diffs.push(CompareRow {
         label: "Allergens".to_string(),
-        value_a: al_a.map(|v| v.len().to_string()).unwrap_or_else(|| "\u{2014}".into()),
-        value_b: al_b.map(|v| v.len().to_string()).unwrap_or_else(|| "\u{2014}".into()),
+        value_a: al_a
+            .map(|v| v.len().to_string())
+            .unwrap_or_else(|| "\u{2014}".into()),
+        value_b: al_b
+            .map(|v| v.len().to_string())
+            .unwrap_or_else(|| "\u{2014}".into()),
         winner: al_winner,
     });
 
@@ -530,7 +615,9 @@ pub fn compare_products(a: &Product, b: &Product) -> Vec<CompareRow> {
     let known = &*ADDITIVE_WARNINGS;
     let count_bad = |p: &Product| -> Option<usize> {
         p.additives_tags.as_ref().map(|tags| {
-            tags.iter().filter(|t| known.contains_key(t.as_str())).count()
+            tags.iter()
+                .filter(|t| known.contains_key(t.as_str()))
+                .count()
         })
     };
     let ad_a = count_bad(a);
@@ -558,7 +645,6 @@ pub enum MacroBalance {
     HighIn(String),
     Unknown,
 }
-
 
 /// Energy density classification based on kcal per 100g.
 #[derive(Debug, Clone, PartialEq)]
@@ -614,14 +700,21 @@ pub fn assess_macro_balance(product: &Product) -> MacroBalance {
     let carbs = n.carbohydrates_100g.unwrap_or(0.0);
     let protein = n.proteins_100g.unwrap_or(0.0);
     let total = fat + carbs + protein;
-    if total < 1.0 { return MacroBalance::Unknown; }
+    if total < 1.0 {
+        return MacroBalance::Unknown;
+    }
     let fat_pct = fat / total * 100.0;
     let carb_pct = carbs / total * 100.0;
     let protein_pct = protein / total * 100.0;
-    if fat_pct > 60.0 { MacroBalance::HighIn("fat".to_string()) }
-    else if carb_pct > 75.0 { MacroBalance::HighIn("carbohydrates".to_string()) }
-    else if protein_pct > 60.0 { MacroBalance::HighIn("protein".to_string()) }
-    else { MacroBalance::Balanced }
+    if fat_pct > 60.0 {
+        MacroBalance::HighIn("fat".to_string())
+    } else if carb_pct > 75.0 {
+        MacroBalance::HighIn("carbohydrates".to_string())
+    } else if protein_pct > 60.0 {
+        MacroBalance::HighIn("protein".to_string())
+    } else {
+        MacroBalance::Balanced
+    }
 }
 
 /// Protein density classification based on grams of protein per 100 kcal.
@@ -728,7 +821,6 @@ pub fn classify_fiber_density(product: &Product) -> Option<FiberDensity> {
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -754,7 +846,10 @@ mod tests {
             }),
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         }
     }
 
@@ -787,7 +882,6 @@ mod tests {
         let a = analyze(&p);
         assert!(a.warnings.is_empty());
     }
-
 
     #[test]
     fn test_detect_allergens_found() {
@@ -835,7 +929,10 @@ mod tests {
             nutriments: None,
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         };
         assert!(health_score(&p).is_none());
     }
@@ -904,7 +1001,12 @@ mod tests {
         p.nutriments.as_mut().unwrap().saturated_fat_100g = Some(8.0);
         let score = health_score(&p).unwrap();
         let baseline = health_score(&make_product(Some("c"), Some(3), vec![])).unwrap();
-        assert!(score < baseline, "sat fat penalty: {} vs {}", score, baseline);
+        assert!(
+            score < baseline,
+            "sat fat penalty: {} vs {}",
+            score,
+            baseline
+        );
     }
 
     #[test]
@@ -913,7 +1015,12 @@ mod tests {
         p.nutriments.as_mut().unwrap().saturated_fat_100g = Some(0.5);
         let score = health_score(&p).unwrap();
         let baseline = health_score(&make_product(Some("c"), Some(3), vec![])).unwrap();
-        assert!(score > baseline, "low sat fat bonus: {} vs {}", score, baseline);
+        assert!(
+            score > baseline,
+            "low sat fat bonus: {} vs {}",
+            score,
+            baseline
+        );
     }
 
     #[test]
@@ -931,10 +1038,14 @@ mod tests {
 
     #[test]
     fn test_health_score_clamps_min() {
-        let p = make_product(Some("e"), Some(4), vec![
-            "en:e150d", "en:e950", "en:e951", "en:e621", "en:e102",
-            "en:e110", "en:e122", "en:e211", "en:e250", "en:e320",
-        ]);
+        let p = make_product(
+            Some("e"),
+            Some(4),
+            vec![
+                "en:e150d", "en:e950", "en:e951", "en:e621", "en:e102", "en:e110", "en:e122",
+                "en:e211", "en:e250", "en:e320",
+            ],
+        );
         let score = health_score(&p).unwrap();
         assert_eq!(score, 0);
     }
@@ -982,15 +1093,28 @@ mod tests {
         n.fat_100g = Some(80.0);
         n.carbohydrates_100g = Some(5.0);
         n.proteins_100g = Some(2.0);
-        assert_eq!(assess_macro_balance(&p), MacroBalance::HighIn("fat".to_string()));
+        assert_eq!(
+            assess_macro_balance(&p),
+            MacroBalance::HighIn("fat".to_string())
+        );
     }
 
     #[test]
     fn test_macro_balance_no_data() {
         let p = Product {
-            code: "1".into(), product_name: None, brands: None,
-            nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            code: "1".into(),
+            product_name: None,
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: None,
+            ingredients_text: None,
+            categories: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         };
         assert_eq!(assess_macro_balance(&p), MacroBalance::Unknown);
     }
@@ -998,7 +1122,10 @@ mod tests {
     #[test]
     fn test_allergen_dedup() {
         let allergens = detect_allergens(Some("milk, lactose, cream"), None);
-        let dairy_count = allergens.iter().filter(|a| a.as_str() == "Milk/Dairy").count();
+        let dairy_count = allergens
+            .iter()
+            .filter(|a| a.as_str() == "Milk/Dairy")
+            .count();
         assert_eq!(dairy_count, 1);
     }
 
@@ -1006,9 +1133,19 @@ mod tests {
     fn test_compare_missing_nutriments() {
         let a = make_product(Some("a"), Some(1), vec![]);
         let b = Product {
-            code: "2".into(), product_name: Some("Empty".into()), brands: None,
-            nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            code: "2".into(),
+            product_name: Some("Empty".into()),
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: None,
+            ingredients_text: None,
+            categories: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         };
         let diffs = compare_products(&a, &b);
         for row in &diffs {
@@ -1021,16 +1158,22 @@ mod tests {
             } else {
                 "\u{2014}"
             };
-            assert_eq!(row.value_b, expected, "unexpected value_b for row '{}'", row.label);
+            assert_eq!(
+                row.value_b, expected,
+                "unexpected value_b for row '{}'",
+                row.label
+            );
             assert_eq!(row.winner, CompareWinner::Tie);
         }
     }
 
     #[test]
     fn test_additive_warning_all_known() {
-        let p = make_product(Some("e"), Some(4), vec![
-            "en:e150d", "en:e950", "en:e951", "en:e621", "en:e102",
-        ]);
+        let p = make_product(
+            Some("e"),
+            Some(4),
+            vec!["en:e150d", "en:e950", "en:e951", "en:e621", "en:e102"],
+        );
         let a = analyze(&p);
         assert_eq!(a.warnings.len(), 5);
     }
@@ -1066,8 +1209,6 @@ mod tests {
             assert_eq!(row.winner, CompareWinner::Tie);
         }
     }
-
-
 
     #[test]
     fn test_compare_includes_nutriscore() {
@@ -1116,8 +1257,8 @@ mod tests {
 
     #[test]
     fn test_energy_density_medium() {
-        let p = make_product(Some("c"), Some(3), vec![]);  // 100 kcal default
-        // default is 100 kcal -> Low, so set to 250
+        let p = make_product(Some("c"), Some(3), vec![]); // 100 kcal default
+                                                          // default is 100 kcal -> Low, so set to 250
         let mut p2 = p;
         p2.nutriments.as_mut().unwrap().energy_kcal_100g = Some(250.0);
         assert_eq!(classify_energy_density(&p2), Some(EnergyDensity::Medium));
@@ -1133,9 +1274,19 @@ mod tests {
     #[test]
     fn test_energy_density_none_without_nutriments() {
         let p = Product {
-            code: "1".into(), product_name: None, brands: None,
-            nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            code: "1".into(),
+            product_name: None,
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: None,
+            ingredients_text: None,
+            categories: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         };
         assert_eq!(classify_energy_density(&p), None);
     }
@@ -1262,8 +1413,6 @@ mod tests {
         let a = analyze(&p);
         assert!(a.fiber_density.is_some());
     }
-
-
 }
 
 /// Sugar density classification based on grams of sugar per 100 kcal.
@@ -1338,7 +1487,10 @@ mod sugar_density_tests {
             }),
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         }
     }
 
@@ -1373,9 +1525,19 @@ mod sugar_density_tests {
     #[test]
     fn test_classify_sugar_density_none_without_data() {
         let p = Product {
-            code: "1".into(), product_name: None, brands: None,
-            nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            code: "1".into(),
+            product_name: None,
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: None,
+            ingredients_text: None,
+            categories: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         };
         assert_eq!(classify_sugar_density(&p), None);
     }
@@ -1468,7 +1630,10 @@ mod sat_fat_density_tests {
             }),
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         }
     }
 
@@ -1503,9 +1668,19 @@ mod sat_fat_density_tests {
     #[test]
     fn test_classify_sat_fat_density_none_without_data() {
         let p = Product {
-            code: "1".into(), product_name: None, brands: None,
-            nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            code: "1".into(),
+            product_name: None,
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: None,
+            ingredients_text: None,
+            categories: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         };
         assert_eq!(classify_sat_fat_density(&p), None);
     }
@@ -1598,7 +1773,10 @@ mod salt_density_tests {
             }),
             ingredients_text: None,
             categories: None,
-            allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         }
     }
 
@@ -1633,9 +1811,19 @@ mod salt_density_tests {
     #[test]
     fn test_classify_salt_density_none_without_data() {
         let p = Product {
-            code: "1".into(), product_name: None, brands: None,
-            nutriscore_grade: None, nova_group: None, additives_tags: None,
-            nutriments: None, ingredients_text: None, categories: None, allergens_tags: None, image_url: None, quantity: None, serving_size: None,
+            code: "1".into(),
+            product_name: None,
+            brands: None,
+            nutriscore_grade: None,
+            nova_group: None,
+            additives_tags: None,
+            nutriments: None,
+            ingredients_text: None,
+            categories: None,
+            allergens_tags: None,
+            image_url: None,
+            quantity: None,
+            serving_size: None,
         };
         assert_eq!(classify_salt_density(&p), None);
     }
@@ -1714,7 +1902,9 @@ mod ingredient_count_tests {
     #[test]
     fn test_count_nested_parens() {
         assert_eq!(
-            count_ingredients(Some("chocolate (cocoa (raw, roasted), sugar), milk, vanilla")),
+            count_ingredients(Some(
+                "chocolate (cocoa (raw, roasted), sugar), milk, vanilla"
+            )),
             Some(3)
         );
     }
@@ -1892,7 +2082,7 @@ mod energy_estimation_fallback_tests {
     #[test]
     fn test_compare_energy_uses_estimated_kcal() {
         let a = product_macros_only(10.0, 30.0, 10.0); // ~250 kcal
-        let b = product_macros_only(5.0, 20.0, 5.0);   // ~145 kcal
+        let b = product_macros_only(5.0, 20.0, 5.0); // ~145 kcal
         let diffs = compare_products(&a, &b);
         let row = diffs.iter().find(|r| r.label == "Energy (kcal)").unwrap();
         assert_eq!(row.value_a, "250.0");

@@ -1,5 +1,5 @@
-mod api;
 mod analyzer;
+mod api;
 mod cache;
 mod daily;
 mod display;
@@ -8,7 +8,11 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "nutriscan", version, about = "Offline food analyzer using Open Food Facts")]
+#[command(
+    name = "nutriscan",
+    version,
+    about = "Offline food analyzer using Open Food Facts"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -164,10 +168,11 @@ fn days_to_ymd(days: u64) -> (u64, u64, u64) {
     (y, m, d)
 }
 
-
 fn date_minus_days(date: &str, n: u64) -> String {
     let parts: Vec<u64> = date.split('-').filter_map(|s| s.parse().ok()).collect();
-    if parts.len() != 3 { return date.to_string(); }
+    if parts.len() != 3 {
+        return date.to_string();
+    }
     let (y, m, d) = (parts[0], parts[1], parts[2]);
     // Convert to days since epoch, subtract, convert back
     let days = ymd_to_days(y, m, d).saturating_sub(n);
@@ -193,15 +198,24 @@ fn validate_date(s: &str) -> Result<String, String> {
     if parts.len() != 3 {
         return Err(format!("Invalid date format '{}': expected YYYY-MM-DD", s));
     }
-    let y: u64 = parts[0].parse().map_err(|_| format!("Invalid year in '{}'", s))?;
-    let m: u64 = parts[1].parse().map_err(|_| format!("Invalid month in '{}'", s))?;
-    let d: u64 = parts[2].parse().map_err(|_| format!("Invalid day in '{}'", s))?;
+    let y: u64 = parts[0]
+        .parse()
+        .map_err(|_| format!("Invalid year in '{}'", s))?;
+    let m: u64 = parts[1]
+        .parse()
+        .map_err(|_| format!("Invalid month in '{}'", s))?;
+    let d: u64 = parts[2]
+        .parse()
+        .map_err(|_| format!("Invalid day in '{}'", s))?;
     if !(1..=12).contains(&m) {
         return Err(format!("Month {} out of range (1-12) in '{}'", m, s));
     }
     let max_day = days_in_month(y, m);
     if !(1..=max_day).contains(&d) {
-        return Err(format!("Day {} out of range (1-{}) for {}-{:02}", d, max_day, y, m));
+        return Err(format!(
+            "Day {} out of range (1-{}) for {}-{:02}",
+            d, max_day, y, m
+        ));
     }
     Ok(format!("{:04}-{:02}-{:02}", y, m, d))
 }
@@ -211,7 +225,13 @@ fn days_in_month(y: u64, m: u64) -> u64 {
     match m {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
-        2 => if y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400)) { 29 } else { 28 },
+        2 => {
+            if y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400)) {
+                29
+            } else {
+                28
+            }
+        }
         _ => 30,
     }
 }
@@ -316,7 +336,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Offline { query } => {
             let cached = db.search(&query)?;
             if cached.is_empty() {
-                println!("No cached products matching '{}'. Use 'update' to populate the cache.", query);
+                println!(
+                    "No cached products matching '{}'. Use 'update' to populate the cache.",
+                    query
+                );
             } else {
                 println!("({} result(s) from cache)", cached.len());
                 for p in &cached {
@@ -344,10 +367,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Avg daily intake: {:.0} kcal/day", avg);
                 }
                 if let Some((ref date, kcal)) = daily_stats.peak_day {
-                    println!("Peak day: {} ({}) — {:.0} kcal", date, crate::weekday_label(date), kcal);
+                    println!(
+                        "Peak day: {} ({}) — {:.0} kcal",
+                        date,
+                        crate::weekday_label(date),
+                        kcal
+                    );
                 }
                 if let Some((ref date, kcal)) = daily_stats.lightest_day {
-                    println!("Lightest day: {} ({}) — {:.0} kcal", date, crate::weekday_label(date), kcal);
+                    println!(
+                        "Lightest day: {} ({}) — {:.0} kcal",
+                        date,
+                        crate::weekday_label(date),
+                        kcal
+                    );
                 }
                 let streak = daily_log.streak(&today())?;
                 if streak > 0 {
@@ -371,8 +404,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let brand = p.brands.as_deref().unwrap_or("");
                     let grade = p.nutriscore_grade.as_deref().unwrap_or("?");
                     // Show date portion of the cached timestamp
-                    let cached = if rp.updated_at.len() >= 10 { &rp.updated_at[..10] } else { &rp.updated_at };
-                    println!("  {}. {} ({}) — Nutri-Score {} [cached: {} ({})]", i + 1, name, brand, grade.to_uppercase(), cached, crate::weekday_label(cached));
+                    let cached = if rp.updated_at.len() >= 10 {
+                        &rp.updated_at[..10]
+                    } else {
+                        &rp.updated_at
+                    };
+                    println!(
+                        "  {}. {} ({}) — Nutri-Score {} [cached: {} ({})]",
+                        i + 1,
+                        name,
+                        brand,
+                        grade.to_uppercase(),
+                        cached,
+                        crate::weekday_label(cached)
+                    );
                 }
             }
         }
@@ -386,13 +431,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let data = std::fs::read_to_string(&input)?;
             let products: Vec<crate::api::Product> = serde_json::from_str(&data)?;
             let (new_count, updated_count) = db.import_products(&products)?;
-            println!("Imported {} products from {} ({} new, {} updated)", new_count + updated_count, input, new_count, updated_count);
+            println!(
+                "Imported {} products from {} ({} new, {} updated)",
+                new_count + updated_count,
+                input,
+                new_count,
+                updated_count
+            );
         }
         Commands::Purge { days } => {
             let evicted = db.evict_stale(days)?;
-            println!("Purged {} stale entries (older than {} days).", evicted, days);
+            println!(
+                "Purged {} stale entries (older than {} days).",
+                evicted, days
+            );
         }
-        Commands::Log { query, servings, date } => {
+        Commands::Log {
+            query,
+            servings,
+            date,
+        } => {
             let product = find_product(&db, &api, &query).await?;
             match product {
                 Some(p) => {
@@ -407,7 +465,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Show running daily totals after logging
                     let summary = daily_log.summary(&date)?;
-                    let day_label = if date == today() { "Today so far".to_string() } else { format!("{} so far", date) };
+                    let day_label = if date == today() {
+                        "Today so far".to_string()
+                    } else {
+                        format!("{} so far", date)
+                    };
                     display::print_running_totals(&summary, &day_label);
                 }
                 None => println!("Product '{}' not found.", query),
@@ -451,7 +513,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("↩ Removed last entry: {} ({})", name, date);
                     // Show updated daily totals after undo
                     let summary = daily_log.summary(&date)?;
-                    let day_label = if date == today() { "Today now".to_string() } else { format!("{} now", date) };
+                    let day_label = if date == today() {
+                        "Today now".to_string()
+                    } else {
+                        format!("{} now", date)
+                    };
                     display::print_running_totals(&summary, &day_label);
                 }
                 None => println!("No entries to undo for {}.", date),
@@ -608,7 +674,6 @@ mod tests {
         assert_eq!(days_in_month(2026, 1), 31);
         assert_eq!(days_in_month(2026, 4), 30);
     }
-
 }
 
 #[cfg(test)]

@@ -1,8 +1,11 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-
 const BASE_URL: &str = "https://world.openfoodfacts.org/api/v2";
+/// Full-text search endpoint (the v2 `/search` endpoint ignores `search_terms`).
+const SEARCH_URL: &str = "https://world.openfoodfacts.org/cgi/search.pl";
+/// Only request the fields we deserialize; unfiltered searches are often rejected with 503.
+const SEARCH_FIELDS: &str = "code,product_name,brands,nutriscore_grade,nova_group,additives_tags,nutriments,ingredients_text,categories,allergens_tags,image_url,quantity,serving_size";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Product {
@@ -25,11 +28,13 @@ pub struct Product {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Nutriments {
-    #[serde(default)]
+    // Open Food Facts uses a hyphenated key for this field.
+    #[serde(default, alias = "energy-kcal_100g")]
     pub energy_kcal_100g: Option<f64>,
     #[serde(default)]
     pub fat_100g: Option<f64>,
-    #[serde(default)]
+    // Open Food Facts uses a hyphenated key for this field.
+    #[serde(default, alias = "saturated-fat_100g")]
     pub saturated_fat_100g: Option<f64>,
     #[serde(default)]
     pub sugars_100g: Option<f64>,
@@ -45,7 +50,8 @@ pub struct Nutriments {
 
 #[derive(Debug, Deserialize)]
 pub struct SearchResponse {
-    #[allow(dead_code)] pub count: u64,
+    #[allow(dead_code)]
+    pub count: u64,
     pub products: Vec<Product>,
 }
 
@@ -72,12 +78,20 @@ impl OpenFoodFactsApi {
 
     pub async fn search(&self, query: &str, page_size: u32) -> Result<Vec<Product>, ApiError> {
         let url = format!(
-            "{}/search?search_terms={}&page_size={}&json=1",
-            BASE_URL,
+            "{}?search_terms={}&search_simple=1&action=process&page_size={}&json=1&fields={}",
+            SEARCH_URL,
             urlencoded(query),
-            page_size
+            page_size,
+            SEARCH_FIELDS
         );
-        let resp: SearchResponse = self.client.get(&url).send().await?.json().await?;
+        let resp: SearchResponse = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
         Ok(resp.products)
     }
 
@@ -113,7 +127,8 @@ fn urlencoded(s: &str) -> String {
 #[derive(Debug)]
 pub enum ApiError {
     Http(reqwest::Error),
-    #[allow(dead_code)] Parse(String),
+    #[allow(dead_code)]
+    Parse(String),
 }
 
 impl std::fmt::Display for ApiError {
@@ -136,6 +151,18 @@ impl From<reqwest::Error> for ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nutriments_accept_off_hyphenated_keys() {
+        let n: Nutriments =
+            serde_json::from_str(r#"{"energy-kcal_100g": 42.0, "saturated-fat_100g": 1.5}"#)
+                .unwrap();
+        assert_eq!(n.energy_kcal_100g, Some(42.0));
+        assert_eq!(n.saturated_fat_100g, Some(1.5));
+        // Serialized cache form keeps the underscore names.
+        let back: Nutriments = serde_json::from_str(&serde_json::to_string(&n).unwrap()).unwrap();
+        assert_eq!(back.energy_kcal_100g, Some(42.0));
+    }
 
     #[test]
     fn test_urlencoded_simple() {
@@ -209,11 +236,7 @@ impl Nutriments {
         if fat.is_none() && carbs.is_none() && protein.is_none() {
             return None;
         }
-        Some(
-            fat.unwrap_or(0.0) * 9.0
-                + carbs.unwrap_or(0.0) * 4.0
-                + protein.unwrap_or(0.0) * 4.0,
-        )
+        Some(fat.unwrap_or(0.0) * 9.0 + carbs.unwrap_or(0.0) * 4.0 + protein.unwrap_or(0.0) * 4.0)
     }
 }
 
@@ -237,9 +260,9 @@ mod energy_estimation_tests {
     fn test_energy_kcal_or_estimated_from_macros() {
         let n = Nutriments {
             energy_kcal_100g: None,
-            fat_100g: Some(10.0),        // 90 kcal
+            fat_100g: Some(10.0),           // 90 kcal
             carbohydrates_100g: Some(20.0), // 80 kcal
-            proteins_100g: Some(5.0),    // 20 kcal
+            proteins_100g: Some(5.0),       // 20 kcal
             ..Default::default()
         };
         assert_eq!(n.energy_kcal_or_estimated(), Some(190.0));

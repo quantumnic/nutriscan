@@ -1,4 +1,7 @@
-use crate::analyzer::{Analysis, AdditiveWarning, CompareRow, EnergyDensity, FiberDensity, HealthRating, MacroBalance, NutriRating, NovaGroup, ProteinDensity, SaltDensity, SatFatDensity, SugarDensity};
+use crate::analyzer::{
+    AdditiveWarning, Analysis, CompareRow, EnergyDensity, FiberDensity, HealthRating, MacroBalance,
+    NovaGroup, NutriRating, ProteinDensity, SaltDensity, SatFatDensity, SugarDensity,
+};
 use crate::api::Product;
 use colored::*;
 
@@ -35,14 +38,30 @@ pub fn print_analysis(a: &Analysis) {
     if let Some(ref n) = a.product.nutriments {
         println!();
         println!("{}", "  Nutrition per 100g:".bold());
-        if let Some(v) = n.energy_kcal_100g { println!("    Energy:    {:.0} kcal", v); }
-        if let Some(v) = n.fat_100g { println!("    Fat:       {:.1} g", v); }
-        if let Some(v) = n.saturated_fat_100g { println!("    Sat. Fat:  {:.1} g", v); }
-        if let Some(v) = n.carbohydrates_100g { println!("    Carbs:     {:.1} g", v); }
-        if let Some(v) = n.sugars_100g { println!("    Sugars:    {:.1} g", v); }
-        if let Some(v) = n.salt_100g { println!("    Salt:      {:.2} g", v); }
-        if let Some(v) = n.proteins_100g { println!("    Proteins:  {:.1} g", v); }
-        if let Some(v) = n.fiber_100g { println!("    Fiber:     {:.1} g", v); }
+        if let Some(v) = n.energy_kcal_100g {
+            println!("    Energy:    {:.0} kcal", v);
+        }
+        if let Some(v) = n.fat_100g {
+            println!("    Fat:       {:.1} g", v);
+        }
+        if let Some(v) = n.saturated_fat_100g {
+            println!("    Sat. Fat:  {:.1} g", v);
+        }
+        if let Some(v) = n.carbohydrates_100g {
+            println!("    Carbs:     {:.1} g", v);
+        }
+        if let Some(v) = n.sugars_100g {
+            println!("    Sugars:    {:.1} g", v);
+        }
+        if let Some(v) = n.salt_100g {
+            println!("    Salt:      {:.2} g", v);
+        }
+        if let Some(v) = n.proteins_100g {
+            println!("    Proteins:  {:.1} g", v);
+        }
+        if let Some(v) = n.fiber_100g {
+            println!("    Fiber:     {:.1} g", v);
+        }
     }
 
     if !a.warnings.is_empty() {
@@ -79,26 +98,50 @@ pub fn print_analysis(a: &Analysis) {
     }
 
     if let Some(ref ed) = a.energy_density {
-        println!("  Energy density: {} {}", ed.emoji(), colorize_energy_density(ed));
+        println!(
+            "  Energy density: {} {}",
+            ed.emoji(),
+            colorize_energy_density(ed)
+        );
     }
 
     if let Some(ref pd) = a.protein_density {
-        println!("  Protein density: {} {}", pd.emoji(), colorize_protein_density(pd));
+        println!(
+            "  Protein density: {} {}",
+            pd.emoji(),
+            colorize_protein_density(pd)
+        );
     }
 
     if let Some(ref fd) = a.fiber_density {
-        println!("  Fiber density: {} {}", fd.emoji(), colorize_fiber_density(fd));
+        println!(
+            "  Fiber density: {} {}",
+            fd.emoji(),
+            colorize_fiber_density(fd)
+        );
     }
 
     if let Some(ref sd) = a.sugar_density {
-        println!("  Sugar density: {} {}", sd.emoji(), colorize_sugar_density(sd));
+        println!(
+            "  Sugar density: {} {}",
+            sd.emoji(),
+            colorize_sugar_density(sd)
+        );
     }
 
     if let Some(ref sfd) = a.sat_fat_density {
-        println!("  Sat. fat density: {} {}", sfd.emoji(), colorize_sat_fat_density(sfd));
+        println!(
+            "  Sat. fat density: {} {}",
+            sfd.emoji(),
+            colorize_sat_fat_density(sfd)
+        );
     }
     if let Some(ref sld) = a.salt_density {
-        println!("  Salt density: {} {}", sld.emoji(), colorize_salt_density(sld));
+        println!(
+            "  Salt density: {} {}",
+            sld.emoji(),
+            colorize_salt_density(sld)
+        );
     }
     if let Some(count) = a.ingredient_count {
         let label = if count <= 5 {
@@ -115,7 +158,11 @@ pub fn print_analysis(a: &Analysis) {
 
 pub fn print_warnings(warnings: &[AdditiveWarning], product_name: &str) {
     if warnings.is_empty() {
-        println!("{} No known problematic additives in {}.", "✓".green(), product_name);
+        println!(
+            "{} No known problematic additives in {}.",
+            "✓".green(),
+            product_name
+        );
     } else {
         println!(
             "{} {} problematic additive(s) in {}:",
@@ -145,19 +192,27 @@ pub fn print_comparison(a: &Product, b: &Product, diffs: &[CompareRow]) {
     );
     println!("  {}", "─".repeat(52));
 
-
     for row in diffs {
         let indicator = match row.winner {
             CompareWinner::A => "◀ ",
             CompareWinner::B => " ▶",
             CompareWinner::Tie => "  ",
         };
-        println!("  {:20} {:>12} {} {:>12}", row.label, row.value_a, indicator, row.value_b);
+        println!(
+            "  {:20} {:>12} {} {:>12}",
+            row.label, row.value_a, indicator, row.value_b
+        );
     }
 
     // Tally up wins
-    let a_wins = diffs.iter().filter(|r| r.winner == CompareWinner::A).count();
-    let b_wins = diffs.iter().filter(|r| r.winner == CompareWinner::B).count();
+    let a_wins = diffs
+        .iter()
+        .filter(|r| r.winner == CompareWinner::A)
+        .count();
+    let b_wins = diffs
+        .iter()
+        .filter(|r| r.winner == CompareWinner::B)
+        .count();
     if a_wins > 0 || b_wins > 0 {
         println!();
         let verdict = if a_wins > b_wins {
@@ -212,7 +267,6 @@ fn colorize_fiber_density(fd: &FiberDensity) -> colored::ColoredString {
     }
 }
 
-
 fn colorize_nova(n: &NovaGroup) -> ColoredString {
     match n {
         NovaGroup::Unprocessed => n.label().green(),
@@ -253,7 +307,16 @@ mod tests {
 
 pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary, streak: u32) {
     println!();
-    println!("{}", format!("═══ Daily Intake: {} ({}) ═══", date, crate::weekday_label(date)).bold().cyan());
+    println!(
+        "{}",
+        format!(
+            "═══ Daily Intake: {} ({}) ═══",
+            date,
+            crate::weekday_label(date)
+        )
+        .bold()
+        .cyan()
+    );
 
     if summary.entries.is_empty() {
         println!("  No products logged for this day.");
@@ -285,11 +348,20 @@ pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary, str
             pct_str.normal()
         };
         if entry.unit == "kcal" {
-            println!("    {:12} {:>6.0} {:4}  {}", entry.label, entry.value, entry.unit, colored_pct);
+            println!(
+                "    {:12} {:>6.0} {:4}  {}",
+                entry.label, entry.value, entry.unit, colored_pct
+            );
         } else if entry.label == "Salt" {
-            println!("    {:12} {:>6.2} {:4}  {}", entry.label, entry.value, entry.unit, colored_pct);
+            println!(
+                "    {:12} {:>6.2} {:4}  {}",
+                entry.label, entry.value, entry.unit, colored_pct
+            );
         } else {
-            println!("    {:12} {:>6.1} {:4}  {}", entry.label, entry.value, entry.unit, colored_pct);
+            println!(
+                "    {:12} {:>6.1} {:4}  {}",
+                entry.label, entry.value, entry.unit, colored_pct
+            );
         }
     }
 
@@ -318,14 +390,35 @@ pub fn print_daily_summary(date: &str, summary: &crate::daily::DailySummary, str
 
     if streak > 0 {
         let streak_msg = streak_motivation(streak);
-        println!("  🔥 Logging streak: {} consecutive day{}! {}", streak, if streak == 1 { "" } else { "s" }, streak_msg);
+        println!(
+            "  🔥 Logging streak: {} consecutive day{}! {}",
+            streak,
+            if streak == 1 { "" } else { "s" },
+            streak_msg
+        );
     }
     println!();
 }
 
-pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily::DailySummary)], streak: u32) {
+pub fn print_weekly_summary(
+    from: &str,
+    to: &str,
+    days: &[(String, crate::daily::DailySummary)],
+    streak: u32,
+) {
     println!();
-    println!("{}", format!("═══ Weekly Summary: {} ({}) → {} ({}) ═══", from, crate::weekday_label(from), to, crate::weekday_label(to)).bold().cyan());
+    println!(
+        "{}",
+        format!(
+            "═══ Weekly Summary: {} ({}) → {} ({}) ═══",
+            from,
+            crate::weekday_label(from),
+            to,
+            crate::weekday_label(to)
+        )
+        .bold()
+        .cyan()
+    );
 
     if days.is_empty() {
         println!("  No products logged in this period.");
@@ -394,11 +487,21 @@ pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily:
     let avg_protein = week_protein / logged_days;
     let avg_kcal = week_kcal / logged_days;
     let mut warnings: Vec<&str> = Vec::new();
-    if avg_salt > 5.0 { warnings.push("⚠ Avg salt exceeds 5 g/day"); }
-    if avg_sugar > 50.0 { warnings.push("⚠ Avg sugar exceeds 50 g/day"); }
-    if avg_sat_fat > 20.0 { warnings.push("⚠ Avg saturated fat exceeds 20 g/day"); }
-    if avg_fiber < 25.0 && avg_kcal > 500.0 { warnings.push("💡 Avg fiber below 25 g/day"); }
-    if avg_protein < 50.0 && avg_kcal > 500.0 { warnings.push("💡 Avg protein below 50 g/day"); }
+    if avg_salt > 5.0 {
+        warnings.push("⚠ Avg salt exceeds 5 g/day");
+    }
+    if avg_sugar > 50.0 {
+        warnings.push("⚠ Avg sugar exceeds 50 g/day");
+    }
+    if avg_sat_fat > 20.0 {
+        warnings.push("⚠ Avg saturated fat exceeds 20 g/day");
+    }
+    if avg_fiber < 25.0 && avg_kcal > 500.0 {
+        warnings.push("💡 Avg fiber below 25 g/day");
+    }
+    if avg_protein < 50.0 && avg_kcal > 500.0 {
+        warnings.push("💡 Avg protein below 50 g/day");
+    }
     if !warnings.is_empty() {
         println!();
         for w in &warnings {
@@ -409,7 +512,12 @@ pub fn print_weekly_summary(from: &str, to: &str, days: &[(String, crate::daily:
     if streak > 0 {
         println!();
         let streak_msg = streak_motivation(streak);
-        println!("  🔥 Logging streak: {} consecutive day{}! {}", streak, if streak == 1 { "" } else { "s" }, streak_msg);
+        println!(
+            "  🔥 Logging streak: {} consecutive day{}! {}",
+            streak,
+            if streak == 1 { "" } else { "s" },
+            streak_msg
+        );
     }
     println!();
 }
@@ -507,7 +615,10 @@ pub fn print_running_totals(summary: &crate::daily::DailySummary, day_label: &st
     let target = RecommendedDailyValues::KCAL;
     let remaining = target - summary.total_kcal;
     if remaining > 0.0 {
-        println!("   🎯 {:.0} kcal remaining (of {:.0} kcal daily target)", remaining, target);
+        println!(
+            "   🎯 {:.0} kcal remaining (of {:.0} kcal daily target)",
+            remaining, target
+        );
     } else {
         println!("   ⚡ Daily target of {:.0} kcal reached!", target);
     }

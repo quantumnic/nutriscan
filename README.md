@@ -13,7 +13,9 @@ Offline food analysis using [Open Food Facts](https://world.openfoodfacts.org/) 
 ## Installation
 
 ```bash
-cargo install --path .
+cargo install --git https://github.com/quantumnic/nutriscan
+# or from a clone:
+git clone https://github.com/quantumnic/nutriscan && cd nutriscan && cargo install --path .
 ```
 
 ## Usage
