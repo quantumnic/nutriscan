@@ -22,6 +22,7 @@ impl Cache {
         Ok(cache)
     }
 
+
     /// Map a database row to a Product (shared across queries).
     fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<Product> {
         let additives_json: Option<String> = row.get(5)?;
@@ -108,11 +109,7 @@ impl Cache {
     #[allow(dead_code)]
     pub fn get_by_code(&self, code: &str) -> SqlResult<Option<Product>> {
         let mut results = self.search_exact_code(code)?;
-        Ok(if results.is_empty() {
-            None
-        } else {
-            Some(results.remove(0))
-        })
+        Ok(if results.is_empty() { None } else { Some(results.remove(0)) })
     }
 
     #[allow(dead_code)]
@@ -128,8 +125,7 @@ impl Cache {
     }
 
     pub fn count(&self) -> SqlResult<i64> {
-        self.conn
-            .query_row("SELECT COUNT(*) FROM products", [], |row| row.get(0))
+        self.conn.query_row("SELECT COUNT(*) FROM products", [], |row| row.get(0))
     }
 
     /// Remove products older than `days` from the cache.
@@ -145,9 +141,9 @@ impl Cache {
     /// Return codes of products older than `days`.
     #[allow(dead_code)]
     pub fn stale_codes(&self, days: u32) -> SqlResult<Vec<String>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT code FROM products WHERE updated_at < datetime('now', ?1)")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT code FROM products WHERE updated_at < datetime('now', ?1)",
+        )?;
         let rows = stmt.query_map(params![format!("-{} days", days)], |row| row.get(0))?;
         rows.collect()
     }
@@ -184,6 +180,7 @@ impl Cache {
         Ok((page_count * page_size, count))
     }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -243,9 +240,7 @@ mod tests {
     #[test]
     fn test_get_by_code() {
         let cache = Cache::open_in_memory().unwrap();
-        cache
-            .upsert(&sample_product("5449000000996", "Coca Cola"))
-            .unwrap();
+        cache.upsert(&sample_product("5449000000996", "Coca Cola")).unwrap();
         let p = cache.get_by_code("5449000000996").unwrap().unwrap();
         assert_eq!(p.product_name.as_deref(), Some("Coca Cola"));
     }
@@ -324,9 +319,7 @@ mod tests {
     fn test_recent_limit() {
         let cache = Cache::open_in_memory().unwrap();
         for i in 0..5 {
-            cache
-                .upsert(&sample_product(&i.to_string(), &format!("P{}", i)))
-                .unwrap();
+            cache.upsert(&sample_product(&i.to_string(), &format!("P{}", i))).unwrap();
         }
         let recent = cache.recent(3).unwrap();
         assert_eq!(recent.len(), 3);
@@ -466,10 +459,7 @@ mod import_bulk_tests {
             nutriscore_grade: None,
             nova_group: None,
             additives_tags: None,
-            nutriments: Some(Nutriments {
-                energy_kcal_100g: Some(100.0),
-                ..Default::default()
-            }),
+            nutriments: Some(Nutriments { energy_kcal_100g: Some(100.0), ..Default::default() }),
             ingredients_text: None,
             categories: None,
             allergens_tags: None,
@@ -530,10 +520,7 @@ impl Cache {
         let rows = stmt.query_map(params![limit], |row| {
             let product = Self::row_to_product(row)?;
             let updated_at: String = row.get(13)?;
-            Ok(RecentProduct {
-                product,
-                updated_at,
-            })
+            Ok(RecentProduct { product, updated_at })
         })?;
         rows.collect()
     }

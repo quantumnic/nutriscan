@@ -1,6 +1,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
+
 const BASE_URL: &str = "https://world.openfoodfacts.org/api/v2";
 /// Full-text search endpoint (the v2 `/search` endpoint ignores `search_terms`).
 const SEARCH_URL: &str = "https://world.openfoodfacts.org/cgi/search.pl";
@@ -50,8 +51,7 @@ pub struct Nutriments {
 
 #[derive(Debug, Deserialize)]
 pub struct SearchResponse {
-    #[allow(dead_code)]
-    pub count: u64,
+    #[allow(dead_code)] pub count: u64,
     pub products: Vec<Product>,
 }
 
@@ -127,8 +127,7 @@ fn urlencoded(s: &str) -> String {
 #[derive(Debug)]
 pub enum ApiError {
     Http(reqwest::Error),
-    #[allow(dead_code)]
-    Parse(String),
+    #[allow(dead_code)] Parse(String),
 }
 
 impl std::fmt::Display for ApiError {
@@ -236,7 +235,11 @@ impl Nutriments {
         if fat.is_none() && carbs.is_none() && protein.is_none() {
             return None;
         }
-        Some(fat.unwrap_or(0.0) * 9.0 + carbs.unwrap_or(0.0) * 4.0 + protein.unwrap_or(0.0) * 4.0)
+        Some(
+            fat.unwrap_or(0.0) * 9.0
+                + carbs.unwrap_or(0.0) * 4.0
+                + protein.unwrap_or(0.0) * 4.0,
+        )
     }
 }
 
@@ -260,9 +263,9 @@ mod energy_estimation_tests {
     fn test_energy_kcal_or_estimated_from_macros() {
         let n = Nutriments {
             energy_kcal_100g: None,
-            fat_100g: Some(10.0),           // 90 kcal
+            fat_100g: Some(10.0),        // 90 kcal
             carbohydrates_100g: Some(20.0), // 80 kcal
-            proteins_100g: Some(5.0),       // 20 kcal
+            proteins_100g: Some(5.0),    // 20 kcal
             ..Default::default()
         };
         assert_eq!(n.energy_kcal_or_estimated(), Some(190.0));
